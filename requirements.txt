@@ -1,0 +1,11 @@
+dill==0.4.1
+dotenv==0.9.9
+joblib==1.5.3
+numpy==2.4.4
+packaging==26.1
+python-dotenv==1.2.2
+scikit-learn==1.8.0
+scipy==1.17.1
+small-text==1.4.1
+threadpoolctl==3.6.0
+tqdm==4.67.3
