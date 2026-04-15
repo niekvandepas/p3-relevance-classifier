@@ -64,41 +64,69 @@ if not DATA_PATH:
 # 1. Load and Prepare the Data
 # ==========================================
 
-print_header("Parsing JSON")
+CACHE_FILE = "dataset_cache.joblib"
 
-raw_texts = []
-pool_labels = []
+if os.path.exists(CACHE_FILE):
+    print_header("Loading cached texts and vectorizer from disk...")
+    # CHANGED: Load the pre-computed objects directly
+    cached_data = joblib.load(CACHE_FILE)
+    raw_texts = cached_data["raw_texts"]
+    pool_labels = cached_data["pool_labels"]
+    x_features = cached_data["x_features"]
+    vectorizer = cached_data["vectorizer"]
+    y_labels = np.array(pool_labels)
 
-total_lines = 16712355 # Output of wc -l
+else:
+    print_header("Parsing JSON")
 
-with open(DATA_PATH, "r", encoding="utf-8") as f:
-    for i, line in enumerate(f, 1):
-        if i % 100000 == 0:
-            print(f"Processed {i} out of 16,712,355 lines ({(i/total_lines)*100:.2f}%)")
-        item = json.loads(line)
+    raw_texts = []
+    pool_labels = []
 
-        text = ""
-        # If item is a comment, include it
-        if "body" in item:
-            text = item["body"]
+    total_lines = 16712355  # Output of wc -l
 
-        # If item is a submission, include it only if it has self text (e.g. skip link- or image-posts, which can't be feasibly labeled or analyzed).
-        elif "title" in item:
-            if item.get("selftext", "").strip():
-                text = item["title"] + " " + item["selftext"]
-            else:
-                continue
+    with open(DATA_PATH, "r", encoding="utf-8") as f:
+        for i, line in enumerate(f, 1):
+            if i % 100000 == 0:
+                print(
+                    f"Processed {i} out of 16,712,355 lines ({(i/total_lines)*100:.2f}%)"
+                )
+            item = json.loads(line)
 
-        # Only consider non-empty texts
-        if text.strip():
-            raw_texts.append(text)
-            pool_labels.append(LABEL_UNLABELED)
+            text = ""
+            # If item is a comment, include it
+            if "body" in item:
+                text = item["body"]
 
-# Vectorize the text using TF-IDF
-vectorizer = TfidfVectorizer(max_features=10000)
-x_features = vectorizer.fit_transform(raw_texts)
+            # If item is a submission, include it only if it has self text (e.g. skip link- or image-posts, which can't be feasibly labeled or analyzed).
+            elif "title" in item:
+                if item.get("selftext", "").strip():
+                    text = item["title"] + " " + item["selftext"]
+                else:
+                    continue
 
-y_labels = np.array(pool_labels)
+            # Only consider non-empty texts
+            if text.strip():
+                raw_texts.append(text)
+                pool_labels.append(LABEL_UNLABELED)
+
+    print_header("Computing TF-IDF")
+
+    # Vectorize the text using TF-IDF
+    vectorizer = TfidfVectorizer(max_features=10000)
+    x_features = vectorizer.fit_transform(raw_texts)
+
+    y_labels = np.array(pool_labels)
+
+    print_header("Saving parsed data and vectorizer to cache...")
+    joblib.dump(
+        {
+            "raw_texts": raw_texts,
+            "pool_labels": pool_labels,
+            "x_features": x_features,
+            "vectorizer": vectorizer,
+        },
+        CACHE_FILE,
+    )
 
 # Wrap the data in small-text's specific SklearnDataset format
 target_labels = np.array([0, 1])
