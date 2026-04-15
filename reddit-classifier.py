@@ -116,85 +116,131 @@ active_learner = PoolBasedActiveLearner(
 
 
 # ==========================================
-# 3. Initialize with a guided seed
+# 3. Initialize or Resume with Seed
 # ==========================================
 np.random.seed(42)
 
-print_header("Initializing seed labels")
+ANNOTATIONS_FILE = "reddit_annotations_progress.json"
+annotations_dict = {}
 
-keywords = ["eten", "culinair", "kaas", "stamppot", "recept", "stroopwafel"]
+print_header("Initializing or Resuming Labels")
 
-# Use a word boundary regex pattern rather than plain text search, since "eten" would otherwise include "weten", "meten", etc.
-pattern = re.compile(r"\b(" + "|".join(keywords) + r")\b", re.IGNORECASE)
-candidate_indices = [idx for idx, text in enumerate(raw_texts) if pattern.search(text)]
+# Check if there is previous progress to load
+if os.path.exists(ANNOTATIONS_FILE):
+    print(f"Found existing progress in {ANNOTATIONS_FILE}. Resuming...")
+    with open(ANNOTATIONS_FILE, "r") as f:
+        annotations_dict = json.load(f)
 
-print(
-    f"Found {len(candidate_indices)} potential hits out of {len(raw_texts)} total texts using keyword search."
-)
+    # Convert string keys from JSON back to integers
+    resumed_indices = np.array([int(k) for k in annotations_dict.keys()])
+    resumed_labels = np.array(list(annotations_dict.values()))
 
-# Randomly select 5 samples from this concentrated list, falling back to random if not enough hits
-if len(candidate_indices) >= 5:
-    initial_indices = np.random.choice(candidate_indices, size=5, replace=False)
+    active_learner.initialize_data(resumed_indices, resumed_labels)
+
 else:
-    print("Not enough keyword hits! Falling back to random initialization.")
-    initial_indices = random_initialization(train_dataset, n_samples=5)
+    keywords = ["eten", "culinair", "kaas", "stamppot", "recept", "stroopwafel"]
+    pattern = re.compile(r"\b(" + "|".join(keywords) + r")\b", re.IGNORECASE)
+    candidate_indices = [
+        idx for idx, text in enumerate(raw_texts) if pattern.search(text)
+    ]
 
-seed_labels = []
+    print(
+        f"Found {len(candidate_indices)} potential hits out of {len(raw_texts)} total texts using keyword search."
+    )
 
-for count, idx in enumerate(initial_indices):
-    print(f"\nSeed Item {count+1}/5")
-    print(preview_text(raw_texts[idx]))
-    print("")
+    if len(candidate_indices) >= 5:
+        initial_indices = np.random.choice(candidate_indices, size=5, replace=False)
+    else:
+        print("Not enough keyword hits! Falling back to random initialization.")
+        initial_indices = random_initialization(train_dataset, n_samples=5)
 
-    label = input("Label (0 for Not Relevant, 1 for Relevant (Dutch Cuisine)): ")
-    if label not in ["0", "1"]:
-        raise ValueError("Invalid label! Please enter 0 or 1.")
-    seed_labels.append(int(label))
+    seed_labels = []
 
-    print("\n\n\n\n\n")
-    print_divider()
-
-active_learner.initialize_data(initial_indices, np.array(seed_labels))
-
-
-# ==========================================
-# 4. The Active Learning loop
-# ==========================================
-num_queries = 3
-samples_per_query = 5
-
-print_header("Starting Active Learning Loop...\n")
-
-for i in range(num_queries):
-    # Step A: The learner calculates uncertainties and asks for the most informative texts
-    queried_indices = active_learner.query(num_samples=samples_per_query)
-
-    # Step B: manual labeling
-    current_labels = []
-    for count, idx in enumerate(queried_indices):
-        print(f"\nItem {count+1}/{samples_per_query}")
+    for count, idx in enumerate(initial_indices):
+        print(f"\nSeed Item {count+1}/5")
         print(preview_text(raw_texts[idx]))
         print("")
 
         label = input("Label (0 for Not Relevant, 1 for Relevant (Dutch Cuisine)): ")
         if label not in ["0", "1"]:
             raise ValueError("Invalid label! Please enter 0 or 1.")
-
-        current_labels.append(int(label))
+        seed_labels.append(int(label))
 
         print("\n\n\n\n\n")
         print_divider()
 
-    # Step C: Feed the answers back to the model so it can retrain itself
+    active_learner.initialize_data(initial_indices, np.array(seed_labels))
+
+    for idx, lbl in zip(initial_indices, seed_labels):
+        annotations_dict[str(idx)] = int(lbl)
+
+    with open(ANNOTATIONS_FILE, "w") as f:
+        json.dump(annotations_dict, f)
+
+
+# ==========================================
+# 4. The Active Learning loop
+# ==========================================
+samples_per_query = 100
+
+print_header(f"Starting labeling session (Batch size: {samples_per_query})...\n")
+
+queried_indices = active_learner.query(num_samples=samples_per_query)
+
+current_labels = []
+quit_requested = False
+
+for count, idx in enumerate(queried_indices):
+    print(f"\nItem {count+1}/{samples_per_query}")
+    print(preview_text(raw_texts[idx]))
+    print("")
+
+    label = input("Label (0=No, 1=Yes, 'q'=Save and Quit): ")
+
+    if label.lower() == "q":
+        quit_requested = True
+        break
+
+    if label not in ["0", "1"]:
+        raise ValueError("Invalid label! Please enter 0, 1, or q.")
+
+    current_labels.append(int(label))
+
+    print("\n\n\n\n\n")
+    print_divider()
+
+# ===========================================
+# 5. Handle model updates and progress saving
+# ===========================================
+
+if quit_requested:
+    # We quit mid-batch. Save the partial labels to JSON, but DO NOT call active_learner.update()
+    # because passing fewer labels than queried will cause a small-text shape mismatch error. We'll just pick them up next time.
+    processed_indices = queried_indices[: len(current_labels)]
+    for idx, lbl in zip(processed_indices, current_labels):
+        annotations_dict[str(idx)] = int(lbl)
+
+    with open(ANNOTATIONS_FILE, "w") as f:
+        json.dump(annotations_dict, f)
+
+    print_header("Early exit requested. Partial batch saved to JSON. Wrapping up...")
+
+else:
+    # Full batch completed. Update the model and save to JSON.
     active_learner.update(np.array(current_labels))
 
-    print(f"Iteration {i+1} | Total labeled: {len(active_learner.indices_labeled)}")
+    for idx, lbl in zip(queried_indices, current_labels):
+        annotations_dict[str(idx)] = int(lbl)
+
+    with open(ANNOTATIONS_FILE, "w") as f:
+        json.dump(annotations_dict, f)
+
+print(f"Total labeled: {len(active_learner.indices_labeled)}")
 
 print("\nSaving the model and vectorizer...")
 
-final_model = active_learner.classifier.model
+final_model = active_learner.classifier.model  # type: ignore
 
-# Both the model and the vectorizer need to be saved for reproducibility
 joblib.dump(final_model, "relevance_model.pkl")
 joblib.dump(vectorizer, "relevance_vectorizer.pkl")
 
