@@ -69,8 +69,12 @@ print_header("Parsing JSON")
 raw_texts = []
 pool_labels = []
 
+total_lines = 16712355 # Output of wc -l
+
 with open(DATA_PATH, "r", encoding="utf-8") as f:
-    for line in f:
+    for i, line in enumerate(f, 1):
+        if i % 100000 == 0:
+            print(f"Processed {i} out of 16,712,355 lines ({(i/total_lines)*100:.2f}%)")
         item = json.loads(line)
 
         text = ""
