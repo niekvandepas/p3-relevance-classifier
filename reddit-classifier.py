@@ -64,11 +64,10 @@ if not DATA_PATH:
 # 1. Load and Prepare the Data
 # ==========================================
 
-CACHE_FILE = "dataset_cache.joblib"
+CACHE_FILE = "reddit_dataset_cache.joblib"
 
 if os.path.exists(CACHE_FILE):
     print_header("Loading cached texts and vectorizer from disk...")
-    # CHANGED: Load the pre-computed objects directly
     cached_data = joblib.load(CACHE_FILE)
     raw_texts = cached_data["raw_texts"]
     pool_labels = cached_data["pool_labels"]
@@ -171,6 +170,8 @@ if os.path.exists(ANNOTATIONS_FILE):
 
 else:
     keywords = ["eten", "culinair", "kaas", "stamppot", "recept", "stroopwafel"]
+
+    # Use a word boundary regex pattern rather than plain text search, since "eten" would otherwise include "weten", "meten", etc.
     pattern = re.compile(r"\b(" + "|".join(keywords) + r")\b", re.IGNORECASE)
     candidate_indices = [
         idx for idx, text in enumerate(raw_texts) if pattern.search(text)
@@ -180,6 +181,7 @@ else:
         f"Found {len(candidate_indices)} potential hits out of {len(raw_texts)} total texts using keyword search."
     )
 
+    # Randomly select 5 samples from this concentrated list, falling back to random if not enough hits
     if len(candidate_indices) >= 5:
         initial_indices = np.random.choice(candidate_indices, size=5, replace=False)
     else:
@@ -217,8 +219,10 @@ samples_per_query = 100
 
 print_header(f"Starting labeling session (Batch size: {samples_per_query})...\n")
 
+# Step A: The learner calculates uncertainties and asks for the most informative texts
 queried_indices = active_learner.query(num_samples=samples_per_query)
 
+# Step B: manual labeling
 current_labels = []
 quit_requested = False
 
@@ -273,7 +277,8 @@ print("\nSaving the model and vectorizer...")
 
 final_model = active_learner.classifier.model  # type: ignore
 
-joblib.dump(final_model, "relevance_model.pkl")
-joblib.dump(vectorizer, "relevance_vectorizer.pkl")
+# Both the model and the vectorizer need to be saved for reproducibility
+joblib.dump(final_model, "reddit_relevance_model.pkl")
+joblib.dump(vectorizer, "reddit_relevance_vectorizer.pkl")
 
 print("Saved successfully!")
