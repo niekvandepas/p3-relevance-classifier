@@ -3,6 +3,7 @@ import re
 import shutil
 import textwrap
 import html
+import time
 import unicodedata
 from ftfy import fix_text
 
@@ -118,6 +119,8 @@ if not DATA_PATH:
 CACHE_FILE = "delpher_dataset_cache.joblib"
 
 if os.path.exists(CACHE_FILE):
+    start_time = time.time()
+
     print_header("Loading cached texts and vectorizer from disk...")
     cached_data = joblib.load(CACHE_FILE)
     raw_texts: list[str] = cached_data["raw_texts"]
@@ -125,6 +128,8 @@ if os.path.exists(CACHE_FILE):
     x_features = cached_data["x_features"]
     vectorizer = cached_data["vectorizer"]
     y_labels = np.array(pool_labels)
+
+    print(f"Loaded cached data in {time.time() - start_time:.2f} seconds!")
 
 else:
     print_header("Parsing JSON")
