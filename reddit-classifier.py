@@ -112,6 +112,8 @@ KEYWORDS = (
     ]
 )
 
+KEYWORDS_PATTERN = re.compile(r"\b(" + "|".join(KEYWORDS) + r")\b", re.IGNORECASE)
+
 load_dotenv()
 
 DATA_FOLDER = os.getenv("REDDIT_DATA_FOLDER")
@@ -256,7 +258,6 @@ else:
         "No existing progress found. Starting fresh initialization with keyword filtering..."
     )
 
-    pattern = re.compile(r"\b(" + "|".join(KEYWORDS) + r")\b", re.IGNORECASE)
     candidate_indices = []
 
     for idx, text in enumerate(raw_texts):
@@ -265,7 +266,7 @@ else:
             end="\r",
         )
 
-        matches = set(m.lower() for m in pattern.findall(text))
+        matches = set(m.lower() for m in KEYWORDS_PATTERN.findall(text))
         match_count = len(matches)
 
         if match_count >= 4:
@@ -290,7 +291,9 @@ else:
         print(preview_text(raw_texts[idx]))
         print("")
 
-        label = input("Label (0 for Not Relevant, 1 for Relevant (Dutch Cuisine)): ")
+        label = input(
+            "Label (0 for Not Relevant, 1 for Relevant (Dutch culinary culture)): "
+        )
         if label not in ["0", "1"]:
             raise ValueError("Invalid label! Please enter 0 or 1.")
         seed_labels.append(int(label))
@@ -310,7 +313,7 @@ else:
 # ==========================================
 # 4. The Active Learning loop
 # ==========================================
-samples_per_query = 10
+samples_per_query = 50
 
 print_header(f"Starting labeling session (Batch size: {samples_per_query})...\n")
 
@@ -325,10 +328,8 @@ for count, idx in enumerate(queried_indices):
     # Displaying how many of the above-defined keywords are present in this article makes labeling easier.
     # For instance, trying to manually scan a 2000-word article about an athlete to find out if it contains an utterance about Dutch food is quite difficult.
     # But if we can see that it contains 0 out of the 16 keywords, it's immediately obvious that it's almost certainly not relevant, and we can label it as such without having to read the entire thing.
-    keywords_count = sum(
-        bool(re.search(rf"\b{re.escape(kw)}\b", raw_texts[idx], re.IGNORECASE))
-        for kw in KEYWORDS
-    )
+    matches = set(m.lower() for m in KEYWORDS_PATTERN.findall(raw_texts[idx]))
+    keywords_count = len(matches)
     print(
         f"\nItem {count+1}/{samples_per_query}. {keywords_count}/{len(KEYWORDS)} keywords."
     )
