@@ -6,6 +6,7 @@ import html
 import unicodedata
 from ftfy import fix_text
 
+from nltk.corpus import stopwords
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
@@ -23,8 +24,6 @@ from small_text.query_strategies import LeastConfidence
 import joblib
 from dotenv import load_dotenv
 import os
-
-TEXT_PREVIEW_LENGTH = 2000
 
 
 def print_header(text: str) -> None:
@@ -73,9 +72,39 @@ def normalize_unicode(text: str) -> str:
     return normalized
 
 
+TEXT_PREVIEW_LENGTH = 2000
+
+# These words are used to filter the articles in building a seed corpus, as well as during the labeling phase.
+KEYWORDS = [
+    "eten",
+    "culinair",
+    "nederlands",
+    "hollands",
+    "stamppot",
+    "stroopwafel",
+    "bitterballen",
+    "boerenkool",
+    "erwtensoep",
+    "kroket",
+    "poffertjes",
+    "pannenkoeken",
+    "haring",
+    "kibbeling",
+    "drop",
+    "hagelslag",
+    "smakelijk",
+    "gerecht",
+    "lekker",
+    "maaltijd",
+]
+
+
 load_dotenv()
 
 DATA_PATH = os.getenv("DELPHER_DATA_PATH")
+DUTCH_STOP_WORDS = list(
+    set(stopwords.words("dutch")).union({"mijn", "ik", "zijn", "was", "we"})
+)
 
 if not DATA_PATH:
     raise ValueError(
@@ -91,7 +120,7 @@ CACHE_FILE = "delpher_dataset_cache.joblib"
 if os.path.exists(CACHE_FILE):
     print_header("Loading cached texts and vectorizer from disk...")
     cached_data = joblib.load(CACHE_FILE)
-    raw_texts = cached_data["raw_texts"]
+    raw_texts: list[str] = cached_data["raw_texts"]
     pool_labels = cached_data["pool_labels"]
     x_features = cached_data["x_features"]
     vectorizer = cached_data["vectorizer"]
@@ -100,16 +129,16 @@ if os.path.exists(CACHE_FILE):
 else:
     print_header("Parsing JSON")
 
-    raw_texts = []
+    raw_texts: list[str] = []
     pool_labels = []
 
-    total_lines = 552962
+    total_lines = 552962  # Output of wc -l
 
     with open(DATA_PATH, "r", encoding="utf-8") as f:
         for i, line in enumerate(f, 1):
             if i % 100000 == 0:
                 print(
-                    f"Processed {i} out of 552,962 lines ({(i/total_lines)*100:.2f}%)"
+                    f"Processed {i} out of {format(total_lines, ',')} lines ({i/total_lines:.1%})..."
                 )
             item = json.loads(line)
 
@@ -136,8 +165,10 @@ else:
 
     print_header("Computing TF-IDF")
 
-    # Vectorize the text using TF-IDF
-    vectorizer = TfidfVectorizer(max_features=10000)
+    # Vectorize the text using TF-IDF, ignoring stopwords and words that appear in more than 50% of docs or fewer than 5 times total.
+    vectorizer = TfidfVectorizer(
+        max_features=10000, stop_words=DUTCH_STOP_WORDS, max_df=0.5, min_df=5
+    )
     x_features = vectorizer.fit_transform(raw_texts)
 
     y_labels = np.array(pool_labels)
@@ -195,29 +226,45 @@ if os.path.exists(ANNOTATIONS_FILE):
     active_learner.initialize_data(resumed_indices, resumed_labels)
 
 else:
-    keywords = ["eten", "culinair", "kaas", "stamppot", "recept", "stroopwafel"]
+    # Filter for articles that contain at least four of the above keywords.
+    # This is a somewhat arbitrary number that was experimentally determined:
+    # filtering on articles that contained at least one returned too many results to be useful,
+    # while filtering on articles that contained all of them returned 0 results.
+    # It doesn't really matter that much anyway, since this is only to get some useful seed labels.
+    # The real classification is done later, after labeling.
+    pattern = re.compile(r"\b(" + "|".join(KEYWORDS) + r")\b", re.IGNORECASE)
+    candidate_indices = []
 
-    # Use a word boundary regex pattern rather than plain text search, since "eten" would otherwise include "weten", "meten", etc.
-    pattern = re.compile(r"\b(" + "|".join(keywords) + r")\b", re.IGNORECASE)
-    candidate_indices = [
-        idx for idx, text in enumerate(raw_texts) if pattern.search(text)
-    ]
+    for idx, text in enumerate(raw_texts):
+        print(
+            f"Scanning article {idx+1}/{len(raw_texts)} for keyword matches...",
+            end="\r",
+        )
+
+        match_count = sum(
+            bool(re.search(rf"\b{re.escape(kw)}\b", text, re.IGNORECASE))
+            for kw in KEYWORDS
+        )
+
+        if match_count >= 4:
+            candidate_indices.append(idx)
 
     print(
         f"Found {len(candidate_indices)} potential hits out of {len(raw_texts)} total texts using keyword search."
     )
 
-    # Randomly select 5 samples from this concentrated list, falling back to random if not enough hits
-    if len(candidate_indices) >= 5:
-        initial_indices = np.random.choice(candidate_indices, size=5, replace=False)
+    # Randomly select 25 samples from this concentrated list, falling back to random if not enough hits.
+    # Here, too, the number 25 was experimentally decided; using only 5 seed articles turned out not to provide much of a boost.
+    if len(candidate_indices) >= 25:
+        initial_indices = np.random.choice(candidate_indices, size=25, replace=False)
     else:
         print("Not enough keyword hits! Falling back to random initialization.")
-        initial_indices = random_initialization(train_dataset, n_samples=5)
+        initial_indices = random_initialization(train_dataset, n_samples=25)
 
     seed_labels = []
 
     for count, idx in enumerate(initial_indices):
-        print(f"\nSeed Item {count+1}/5")
+        print(f"\nSeed Item {count+1}/25")
         print(preview_text(raw_texts[idx]))
         print("")
 
@@ -241,7 +288,7 @@ else:
 # ==========================================
 # 4. The Active Learning loop
 # ==========================================
-samples_per_query = 100
+samples_per_query = 10
 
 print_header(f"Starting labeling session (Batch size: {samples_per_query})...\n")
 
@@ -253,7 +300,16 @@ current_labels = []
 quit_requested = False
 
 for count, idx in enumerate(queried_indices):
-    print(f"\nItem {count+1}/{samples_per_query}")
+    # Displaying how many of the above-defined keywords are present in this article makes labeling easier.
+    # For instance, trying to manually scan a 2000-word article about an athlete to find out if it contains an utterance about Dutch food is quite difficult.
+    # But if we can see that it contains 0 out of the 16 keywords, it's immediately obvious that it's almost certainly not relevant, and we can label it as such without having to read the entire thing.
+    keywords_count = sum(
+        bool(re.search(rf"\b{re.escape(kw)}\b", raw_texts[idx], re.IGNORECASE))
+        for kw in KEYWORDS
+    )
+    print(
+        f"\nItem {count+1}/{samples_per_query}. {keywords_count}/{len(KEYWORDS)} keywords."
+    )
     print(preview_text(raw_texts[idx]))
     print("")
 
@@ -268,7 +324,7 @@ for count, idx in enumerate(queried_indices):
 
     current_labels.append(int(label))
 
-    print("\n\n\n\n\n")
+    print("\n\n\n\n\n\n\n\n")
     print_divider()
 
 # ===========================================

@@ -1,8 +1,10 @@
 import json
+from pathlib import Path
 import re
 import shutil
 import textwrap
 
+from nltk.corpus import stopwords
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
@@ -20,8 +22,6 @@ from small_text.query_strategies import LeastConfidence
 import joblib
 from dotenv import load_dotenv
 import os
-
-TEXT_PREVIEW_LENGTH = 2000
 
 
 def print_header(text: str) -> None:
@@ -48,28 +48,97 @@ def preview_text(text: str, margin_lines: int = 5) -> str:
     clipped = text[:max_chars]
 
     # Wrap nicely so it respects terminal width
-    return "\n".join(textwrap.wrap(clipped, width=cols))
+    return "\n".join(textwrap.wrap(clipped, width=cols, replace_whitespace=False))
 
+
+TEXT_PREVIEW_LENGTH = 2000
+
+# The language of the dataset to use. The dataset is split into Dutch and English-language items,
+# and classifying both languages with a single model is not ideal, so we classify seperately.
+# This variable is used to set the appropriate stop word list and to import the correct dataset.
+# It is also appended to the model and vectorizer filenames when saving,
+# to avoid collisions if you run the script multiple times with different languages.
+LANGUAGE = "nl"
+
+KEYWORDS = (
+    [
+        "eten",
+        "culinair",
+        "nederlands",
+        "hollands",
+        "stamppot",
+        "stroopwafel",
+        "bitterballen",
+        "boerenkool",
+        "erwtensoep",
+        "kroket",
+        "poffertjes",
+        "pannenkoeken",
+        "haring",
+        "kibbeling",
+        "drop",
+        "hagelslag",
+        "smakelijk",
+        "gerecht",
+        "lekker",
+        "maaltijd",
+    ]
+    if LANGUAGE == "nl"
+    else [
+        "food",
+        "culinary",
+        "dutch",
+        "stamppot",
+        "stroopwafel",
+        "stroopwafels",
+        "bitterballen",
+        "bitterbal",
+        "poffertjes",
+        "kroket",
+        "kibbeling",
+        "hagelslag",
+        "kale",
+        "pea soup",
+        "croquette",
+        "croquettes",
+        "pancakes",
+        "herring",
+        "licorice",
+        "chocolate sprinkles",
+        "dish",
+        "tasty",
+        "meal",
+    ]
+)
 
 load_dotenv()
 
-DATA_PATH = os.getenv("REDDIT_DATA_PATH")
+DATA_FOLDER = os.getenv("REDDIT_DATA_FOLDER")
+STOP_WORDS = (
+    list(set(stopwords.words("dutch")).union({"mijn", "ik", "zijn", "was", "we"}))
+    if LANGUAGE == "nl"
+    else list(set(stopwords.words("english")))
+)
 
-if not DATA_PATH:
+if not DATA_FOLDER:
     raise ValueError(
-        "Please set the REDDIT_DATA_PATH environment variable in your .env file."
+        "Please set the REDDIT_DATA_FOLDER environment variable in your .env file."
     )
+
+data_filename = f"reddit-{LANGUAGE}.ndjson"
+
+DATA_PATH = Path(DATA_FOLDER) / data_filename
 
 # ==========================================
 # 1. Load and Prepare the Data
 # ==========================================
 
-CACHE_FILE = "reddit_dataset_cache.joblib"
+CACHE_FILE = f"reddit_dataset_cache.{LANGUAGE}.joblib"
 
 if os.path.exists(CACHE_FILE):
     print_header("Loading cached texts and vectorizer from disk...")
     cached_data = joblib.load(CACHE_FILE)
-    raw_texts = cached_data["raw_texts"]
+    raw_texts: list[str] = cached_data["raw_texts"]
     pool_labels = cached_data["pool_labels"]
     x_features = cached_data["x_features"]
     vectorizer = cached_data["vectorizer"]
@@ -78,16 +147,16 @@ if os.path.exists(CACHE_FILE):
 else:
     print_header("Parsing JSON")
 
-    raw_texts = []
+    raw_texts: list[str] = []
     pool_labels = []
 
-    total_lines = 16712355  # Output of wc -l
+    total_lines = 10651836 if LANGUAGE == "nl" else 4257108  # Output of wc -l
 
     with open(DATA_PATH, "r", encoding="utf-8") as f:
         for i, line in enumerate(f, 1):
             if i % 100000 == 0:
                 print(
-                    f"Processed {i} out of 16,712,355 lines ({(i/total_lines)*100:.2f}%)"
+                    f"Processed {i} out of {format(total_lines, ',')} lines ({i/total_lines:.1%})..."
                 )
             item = json.loads(line)
 
@@ -110,8 +179,10 @@ else:
 
     print_header("Computing TF-IDF")
 
-    # Vectorize the text using TF-IDF
-    vectorizer = TfidfVectorizer(max_features=10000)
+    # Vectorize the text using TF-IDF, ignoring stopwords and words that appear in more than 50% of docs or fewer than 5 times total.
+    vectorizer = TfidfVectorizer(
+        max_features=10000, stop_words=STOP_WORDS, max_df=0.5, min_df=5
+    )
     x_features = vectorizer.fit_transform(raw_texts)
 
     y_labels = np.array(pool_labels)
@@ -151,7 +222,7 @@ active_learner = PoolBasedActiveLearner(
 # ==========================================
 np.random.seed(42)
 
-ANNOTATIONS_FILE = "reddit_annotations_progress.json"
+ANNOTATIONS_FILE = f"reddit_annotations_progress.{LANGUAGE}.json"
 annotations_dict = {}
 
 print_header("Initializing or Resuming Labels")
@@ -169,29 +240,43 @@ if os.path.exists(ANNOTATIONS_FILE):
     active_learner.initialize_data(resumed_indices, resumed_labels)
 
 else:
-    keywords = ["eten", "culinair", "kaas", "stamppot", "recept", "stroopwafel"]
+    # Filter for articles that contain at least four of the above keywords.
+    # This is a somewhat arbitrary number that was experimentally determined:
+    # filtering on articles that contained at least one returned too many results to be useful,
+    # while filtering on articles that contained all of them returned 0 results.
+    # It doesn't really matter that much anyway, since this is only to get some useful seed labels.
+    # The real classification is done later, after labeling.
+    pattern = re.compile(r"\b(" + "|".join(KEYWORDS) + r")\b", re.IGNORECASE)
+    candidate_indices = []
 
-    # Use a word boundary regex pattern rather than plain text search, since "eten" would otherwise include "weten", "meten", etc.
-    pattern = re.compile(r"\b(" + "|".join(keywords) + r")\b", re.IGNORECASE)
-    candidate_indices = [
-        idx for idx, text in enumerate(raw_texts) if pattern.search(text)
-    ]
+    for idx, text in enumerate(raw_texts):
+        print(
+            f"Scanning item {idx+1}/{len(raw_texts)} for keyword matches...",
+            end="\r",
+        )
+
+        matches = set(m.lower() for m in pattern.findall(text))
+        match_count = len(matches)
+
+        if match_count >= 4:
+            candidate_indices.append(idx)
 
     print(
         f"Found {len(candidate_indices)} potential hits out of {len(raw_texts)} total texts using keyword search."
     )
 
-    # Randomly select 5 samples from this concentrated list, falling back to random if not enough hits
-    if len(candidate_indices) >= 5:
-        initial_indices = np.random.choice(candidate_indices, size=5, replace=False)
+    # Randomly select 25 samples from this concentrated list, falling back to random if not enough hits.
+    # Here, too, the number 25 was experimentally decided; using only 5 seed articles turned out not to provide much of a boost.
+    if len(candidate_indices) >= 25:
+        initial_indices = np.random.choice(candidate_indices, size=25, replace=False)
     else:
         print("Not enough keyword hits! Falling back to random initialization.")
-        initial_indices = random_initialization(train_dataset, n_samples=5)
+        initial_indices = random_initialization(train_dataset, n_samples=25)
 
     seed_labels = []
 
     for count, idx in enumerate(initial_indices):
-        print(f"\nSeed Item {count+1}/5")
+        print(f"\nSeed Item {count+1}/25")
         print(preview_text(raw_texts[idx]))
         print("")
 
@@ -215,7 +300,7 @@ else:
 # ==========================================
 # 4. The Active Learning loop
 # ==========================================
-samples_per_query = 100
+samples_per_query = 10
 
 print_header(f"Starting labeling session (Batch size: {samples_per_query})...\n")
 
@@ -227,7 +312,16 @@ current_labels = []
 quit_requested = False
 
 for count, idx in enumerate(queried_indices):
-    print(f"\nItem {count+1}/{samples_per_query}")
+    # Displaying how many of the above-defined keywords are present in this article makes labeling easier.
+    # For instance, trying to manually scan a 2000-word article about an athlete to find out if it contains an utterance about Dutch food is quite difficult.
+    # But if we can see that it contains 0 out of the 16 keywords, it's immediately obvious that it's almost certainly not relevant, and we can label it as such without having to read the entire thing.
+    keywords_count = sum(
+        bool(re.search(rf"\b{re.escape(kw)}\b", raw_texts[idx], re.IGNORECASE))
+        for kw in KEYWORDS
+    )
+    print(
+        f"\nItem {count+1}/{samples_per_query}. {keywords_count}/{len(KEYWORDS)} keywords."
+    )
     print(preview_text(raw_texts[idx]))
     print("")
 
@@ -242,7 +336,7 @@ for count, idx in enumerate(queried_indices):
 
     current_labels.append(int(label))
 
-    print("\n\n\n\n\n")
+    print("\n\n\n\n\n\n\n\n")
     print_divider()
 
 # ===========================================
@@ -278,7 +372,7 @@ print("\nSaving the model and vectorizer...")
 final_model = active_learner.classifier.model  # type: ignore
 
 # Both the model and the vectorizer need to be saved for reproducibility
-joblib.dump(final_model, "reddit_relevance_model.pkl")
-joblib.dump(vectorizer, "reddit_relevance_vectorizer.pkl")
+joblib.dump(final_model, f"reddit_relevance_model.{LANGUAGE}.pkl")
+joblib.dump(vectorizer, f"reddit_relevance_vectorizer.{LANGUAGE}.pkl")
 
 print("Saved successfully!")
