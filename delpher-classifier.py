@@ -237,6 +237,11 @@ else:
     # while filtering on articles that contained all of them returned 0 results.
     # It doesn't really matter that much anyway, since this is only to get some useful seed labels.
     # The real classification is done later, after labeling.
+
+    print(
+        "No existing progress found. Starting fresh initialization with keyword filtering..."
+    )
+
     pattern = re.compile(r"\b(" + "|".join(KEYWORDS) + r")\b", re.IGNORECASE)
     candidate_indices = []
 
