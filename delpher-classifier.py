@@ -278,7 +278,9 @@ else:
         print(preview_text(raw_texts[idx]))
         print("")
 
-        label = input("Label (0 for Not Relevant, 1 for Relevant (Dutch culinary culture)): ")
+        label = input(
+            "Label (0 for Not Relevant, 1 for Relevant (Dutch culinary culture)): "
+        )
         if label not in ["0", "1"]:
             raise ValueError("Invalid label! Please enter 0 or 1.")
         seed_labels.append(int(label))
@@ -298,7 +300,7 @@ else:
 # ==========================================
 # 4. The Active Learning loop
 # ==========================================
-samples_per_query = 10
+samples_per_query = 50
 
 print_header(f"Starting labeling session (Batch size: {samples_per_query})...\n")
 

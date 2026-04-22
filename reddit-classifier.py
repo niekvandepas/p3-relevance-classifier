@@ -376,7 +376,7 @@ else:
     with open(ANNOTATIONS_FILE, "w") as f:
         json.dump(annotations_dict, f)
 
-print(f"Total labeled: {len(active_learner.indices_labeled)}")
+print(f"Total labeled: {len(annotations_dict)}")
 
 print("\nSaving the model and vectorizer...")
 
