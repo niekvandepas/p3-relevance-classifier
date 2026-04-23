@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import re
 import shutil
 import textwrap
@@ -112,11 +113,26 @@ if not DATA_PATH:
         "Please set the DELPHER_DATA_PATH environment variable in your .env file."
     )
 
+MODEL_FILE_NAME = f"delpher_relevance_model.pkl"
+MODEL_FILE = Path("artifacts/models") / MODEL_FILE_NAME
+
+VECTORIZER_FILE_NAME = f"delpher_relevance_vectorizer.pkl"
+VECTORIZER_FILE = Path("artifacts/models") / VECTORIZER_FILE_NAME
+
+CACHE_FILE_NAME = f"delpher_dataset_cache.joblib"
+CACHE_FILE = Path("artifacts/cache") / CACHE_FILE_NAME
+
+ANNOTATIONS_FILE_NAME = f"delpher_annotations_progress.json"
+ANNOTATIONS_FILE = Path("annotations") / ANNOTATIONS_FILE_NAME
+
+# Ensure directories exist before trying to read/write files
+Path("artifacts/models").mkdir(parents=True, exist_ok=True)
+Path("artifacts/cache").mkdir(parents=True, exist_ok=True)
+Path("annotations").mkdir(parents=True, exist_ok=True)
+
 # ==========================================
 # 1. Load and Prepare the Data
 # ==========================================
-
-CACHE_FILE = "delpher_dataset_cache.joblib"
 
 if os.path.exists(CACHE_FILE):
     start_time = time.time()
@@ -213,7 +229,6 @@ active_learner = PoolBasedActiveLearner(
 # ==========================================
 np.random.seed(42)
 
-ANNOTATIONS_FILE = "delpher_annotations_progress.json"
 annotations_dict = {}
 
 print_header("Initializing or Resuming Labels")
@@ -372,7 +387,7 @@ print("\nSaving the model and vectorizer...")
 final_model = active_learner.classifier.model  # type: ignore
 
 # Both the model and the vectorizer need to be saved for reproducibility
-joblib.dump(final_model, "delpher_relevance_model.pkl")
-joblib.dump(vectorizer, "delpher_relevance_vectorizer.pkl")
+joblib.dump(final_model, MODEL_FILE)
+joblib.dump(vectorizer, VECTORIZER_FILE)
 
 print("Saved successfully!")

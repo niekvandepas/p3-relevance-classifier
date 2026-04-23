@@ -132,11 +132,26 @@ data_filename = f"reddit-{LANGUAGE}.ndjson"
 
 DATA_PATH = Path(DATA_FOLDER) / data_filename
 
+MODEL_FILE_NAME = f"reddit_relevance_model.{LANGUAGE}.pkl"
+MODEL_FILE = Path("artifacts/models") / MODEL_FILE_NAME
+
+VECTORIZER_FILE_NAME = f"reddit_relevance_vectorizer.{LANGUAGE}.pkl"
+VECTORIZER_FILE = Path("artifacts/models") / VECTORIZER_FILE_NAME
+
+CACHE_FILE_NAME = f"reddit_dataset_cache.{LANGUAGE}.joblib"
+CACHE_FILE = Path("artifacts/cache") / CACHE_FILE_NAME
+
+ANNOTATIONS_FILE_NAME = f"reddit_annotations_progress.{LANGUAGE}.json"
+ANNOTATIONS_FILE = Path("annotations") / ANNOTATIONS_FILE_NAME
+
+# Ensure directories exist before trying to read/write files
+Path("artifacts/models").mkdir(parents=True, exist_ok=True)
+Path("artifacts/cache").mkdir(parents=True, exist_ok=True)
+Path("annotations").mkdir(parents=True, exist_ok=True)
+
 # ==========================================
 # 1. Load and Prepare the Data
 # ==========================================
-
-CACHE_FILE = f"reddit_dataset_cache.{LANGUAGE}.joblib"
 
 if os.path.exists(CACHE_FILE):
     start_time = time.time()
@@ -229,7 +244,6 @@ active_learner = PoolBasedActiveLearner(
 # ==========================================
 np.random.seed(42)
 
-ANNOTATIONS_FILE = f"reddit_annotations_progress.{LANGUAGE}.json"
 annotations_dict = {}
 
 print_header("Initializing or Resuming Labels")
@@ -383,7 +397,7 @@ print("\nSaving the model and vectorizer...")
 final_model = active_learner.classifier.model  # type: ignore
 
 # Both the model and the vectorizer need to be saved for reproducibility
-joblib.dump(final_model, f"reddit_relevance_model.{LANGUAGE}.pkl")
-joblib.dump(vectorizer, f"reddit_relevance_vectorizer.{LANGUAGE}.pkl")
+joblib.dump(final_model, MODEL_FILE)
+joblib.dump(vectorizer, VECTORIZER_FILE)
 
 print("Saved successfully!")
