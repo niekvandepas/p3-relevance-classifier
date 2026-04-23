@@ -24,6 +24,15 @@ import joblib
 from dotenv import load_dotenv
 import os
 
+from constants import (
+    REDDIT_ANNOTATIONS_FILE,
+    REDDIT_CACHE_FILE,
+    REDDIT_LANGUAGE,
+    REDDIT_MODEL_FILE,
+    REDDIT_STOP_WORDS,
+    REDDIT_VECTORIZER_FILE,
+)
+
 
 def print_header(text: str) -> None:
     """
@@ -59,7 +68,7 @@ TEXT_PREVIEW_LENGTH = 2000
 # This variable is used to set the appropriate stop word list and to import the correct dataset.
 # It is also appended to the model and vectorizer filenames when saving,
 # to avoid collisions if you run the script multiple times with different languages.
-LANGUAGE = "nl"
+LANGUAGE = REDDIT_LANGUAGE
 
 KEYWORDS = (
     [
@@ -116,33 +125,17 @@ KEYWORDS_PATTERN = re.compile(r"\b(" + "|".join(KEYWORDS) + r")\b", re.IGNORECAS
 
 load_dotenv()
 
-DATA_FOLDER = os.getenv("REDDIT_DATA_FOLDER")
-STOP_WORDS = (
-    list(set(stopwords.words("dutch")).union({"mijn", "ik", "zijn", "was", "we"}))
-    if LANGUAGE == "nl"
-    else list(set(stopwords.words("english")))
-)
+REDDIT_DATA_FOLDER = os.getenv("REDDIT_DATA_FOLDER")
 
-if not DATA_FOLDER:
+if not REDDIT_DATA_FOLDER:
     raise ValueError(
         "Please set the REDDIT_DATA_FOLDER environment variable in your .env file."
     )
 
-data_filename = f"reddit-{LANGUAGE}.ndjson"
+REDDIT_DATA_FILENAME = f"reddit-{REDDIT_LANGUAGE}.ndjson"
 
-DATA_PATH = Path(DATA_FOLDER) / data_filename
+REDDIT_DATA_PATH = Path(REDDIT_DATA_FOLDER) / REDDIT_DATA_FILENAME
 
-MODEL_FILE_NAME = f"reddit_relevance_model.{LANGUAGE}.pkl"
-MODEL_FILE = Path("artifacts/models") / MODEL_FILE_NAME
-
-VECTORIZER_FILE_NAME = f"reddit_relevance_vectorizer.{LANGUAGE}.pkl"
-VECTORIZER_FILE = Path("artifacts/models") / VECTORIZER_FILE_NAME
-
-CACHE_FILE_NAME = f"reddit_dataset_cache.{LANGUAGE}.joblib"
-CACHE_FILE = Path("artifacts/cache") / CACHE_FILE_NAME
-
-ANNOTATIONS_FILE_NAME = f"reddit_annotations_progress.{LANGUAGE}.json"
-ANNOTATIONS_FILE = Path("annotations") / ANNOTATIONS_FILE_NAME
 
 # Ensure directories exist before trying to read/write files
 Path("artifacts/models").mkdir(parents=True, exist_ok=True)
@@ -153,11 +146,11 @@ Path("annotations").mkdir(parents=True, exist_ok=True)
 # 1. Load and Prepare the Data
 # ==========================================
 
-if os.path.exists(CACHE_FILE):
+if os.path.exists(REDDIT_CACHE_FILE):
     start_time = time.time()
 
     print_header("Loading cached texts and vectorizer from disk...")
-    cached_data = joblib.load(CACHE_FILE)
+    cached_data = joblib.load(REDDIT_CACHE_FILE)
     raw_texts: list[str] = cached_data["raw_texts"]
     pool_labels = cached_data["pool_labels"]
     x_features = cached_data["x_features"]
@@ -174,7 +167,7 @@ else:
 
     total_lines = 10651836 if LANGUAGE == "nl" else 4257108  # Output of wc -l
 
-    with open(DATA_PATH, "r", encoding="utf-8") as f:
+    with open(REDDIT_DATA_PATH, "r", encoding="utf-8") as f:
         for i, line in enumerate(f, 1):
             if i % 100000 == 0:
                 print(
@@ -203,7 +196,7 @@ else:
 
     # Vectorize the text using TF-IDF, ignoring stopwords and words that appear in more than 50% of docs or fewer than 5 times total.
     vectorizer = TfidfVectorizer(
-        max_features=10000, stop_words=STOP_WORDS, max_df=0.5, min_df=5
+        max_features=10000, stop_words=REDDIT_STOP_WORDS, max_df=0.5, min_df=5
     )
     x_features = vectorizer.fit_transform(raw_texts)
 
@@ -217,7 +210,7 @@ else:
             "x_features": x_features,
             "vectorizer": vectorizer,
         },
-        CACHE_FILE,
+        REDDIT_CACHE_FILE,
     )
 
 # Wrap the data in small-text's specific SklearnDataset format
@@ -249,9 +242,9 @@ annotations_dict = {}
 print_header("Initializing or Resuming Labels")
 
 # Check if there is previous progress to load
-if os.path.exists(ANNOTATIONS_FILE):
-    print(f"Found existing progress in {ANNOTATIONS_FILE}. Resuming...")
-    with open(ANNOTATIONS_FILE, "r") as f:
+if os.path.exists(REDDIT_ANNOTATIONS_FILE):
+    print(f"Found existing progress in {REDDIT_ANNOTATIONS_FILE}. Resuming...")
+    with open(REDDIT_ANNOTATIONS_FILE, "r") as f:
         annotations_dict = json.load(f)
 
     # Convert string keys from JSON back to integers
@@ -320,7 +313,7 @@ else:
     for idx, lbl in zip(initial_indices, seed_labels):
         annotations_dict[str(idx)] = int(lbl)
 
-    with open(ANNOTATIONS_FILE, "w") as f:
+    with open(REDDIT_ANNOTATIONS_FILE, "w") as f:
         json.dump(annotations_dict, f)
 
 
@@ -375,7 +368,7 @@ if quit_requested:
     for idx, lbl in zip(processed_indices, current_labels):
         annotations_dict[str(idx)] = int(lbl)
 
-    with open(ANNOTATIONS_FILE, "w") as f:
+    with open(REDDIT_ANNOTATIONS_FILE, "w") as f:
         json.dump(annotations_dict, f)
 
     print_header("Early exit requested. Partial batch saved to JSON. Wrapping up...")
@@ -387,7 +380,7 @@ else:
     for idx, lbl in zip(queried_indices, current_labels):
         annotations_dict[str(idx)] = int(lbl)
 
-    with open(ANNOTATIONS_FILE, "w") as f:
+    with open(REDDIT_ANNOTATIONS_FILE, "w") as f:
         json.dump(annotations_dict, f)
 
 print(f"Total labeled: {len(annotations_dict)}")
@@ -397,7 +390,7 @@ print("\nSaving the model and vectorizer...")
 final_model = active_learner.classifier.model  # type: ignore
 
 # Both the model and the vectorizer need to be saved for reproducibility
-joblib.dump(final_model, MODEL_FILE)
-joblib.dump(vectorizer, VECTORIZER_FILE)
+joblib.dump(final_model, REDDIT_MODEL_FILE)
+joblib.dump(vectorizer, REDDIT_VECTORIZER_FILE)
 
 print("Saved successfully!")

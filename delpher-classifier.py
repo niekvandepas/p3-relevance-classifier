@@ -27,6 +27,13 @@ import joblib
 from dotenv import load_dotenv
 import os
 
+from constants import (
+    DELPHER_ANNOTATIONS_FILE,
+    DELPHER_CACHE_FILE,
+    DELPHER_MODEL_FILE,
+    DELPHER_VECTORIZER_FILE,
+)
+
 
 def print_header(text: str) -> None:
     """
@@ -100,7 +107,6 @@ KEYWORDS = [
     "maaltijd",
 ]
 
-
 load_dotenv()
 
 DATA_PATH = os.getenv("DELPHER_DATA_PATH")
@@ -113,18 +119,6 @@ if not DATA_PATH:
         "Please set the DELPHER_DATA_PATH environment variable in your .env file."
     )
 
-MODEL_FILE_NAME = f"delpher_relevance_model.pkl"
-MODEL_FILE = Path("artifacts/models") / MODEL_FILE_NAME
-
-VECTORIZER_FILE_NAME = f"delpher_relevance_vectorizer.pkl"
-VECTORIZER_FILE = Path("artifacts/models") / VECTORIZER_FILE_NAME
-
-CACHE_FILE_NAME = f"delpher_dataset_cache.joblib"
-CACHE_FILE = Path("artifacts/cache") / CACHE_FILE_NAME
-
-ANNOTATIONS_FILE_NAME = f"delpher_annotations_progress.json"
-ANNOTATIONS_FILE = Path("annotations") / ANNOTATIONS_FILE_NAME
-
 # Ensure directories exist before trying to read/write files
 Path("artifacts/models").mkdir(parents=True, exist_ok=True)
 Path("artifacts/cache").mkdir(parents=True, exist_ok=True)
@@ -134,11 +128,11 @@ Path("annotations").mkdir(parents=True, exist_ok=True)
 # 1. Load and Prepare the Data
 # ==========================================
 
-if os.path.exists(CACHE_FILE):
+if os.path.exists(DELPHER_CACHE_FILE):
     start_time = time.time()
 
     print_header("Loading cached texts and vectorizer from disk...")
-    cached_data = joblib.load(CACHE_FILE)
+    cached_data = joblib.load(DELPHER_CACHE_FILE)
     raw_texts: list[str] = cached_data["raw_texts"]
     pool_labels = cached_data["pool_labels"]
     x_features = cached_data["x_features"]
@@ -202,7 +196,7 @@ else:
             "x_features": x_features,
             "vectorizer": vectorizer,
         },
-        CACHE_FILE,
+        DELPHER_CACHE_FILE,
     )
 
 # Wrap the data in small-text's specific SklearnDataset format
@@ -234,9 +228,9 @@ annotations_dict = {}
 print_header("Initializing or Resuming Labels")
 
 # Check if there is previous progress to load
-if os.path.exists(ANNOTATIONS_FILE):
-    print(f"Found existing progress in {ANNOTATIONS_FILE}. Resuming...")
-    with open(ANNOTATIONS_FILE, "r") as f:
+if os.path.exists(DELPHER_ANNOTATIONS_FILE):
+    print(f"Found existing progress in {DELPHER_ANNOTATIONS_FILE}. Resuming...")
+    with open(DELPHER_ANNOTATIONS_FILE, "r") as f:
         annotations_dict = json.load(f)
 
     # Convert string keys from JSON back to integers
@@ -308,7 +302,7 @@ else:
     for idx, lbl in zip(initial_indices, seed_labels):
         annotations_dict[str(idx)] = int(lbl)
 
-    with open(ANNOTATIONS_FILE, "w") as f:
+    with open(DELPHER_ANNOTATIONS_FILE, "w") as f:
         json.dump(annotations_dict, f)
 
 
@@ -365,7 +359,7 @@ if quit_requested:
     for idx, lbl in zip(processed_indices, current_labels):
         annotations_dict[str(idx)] = int(lbl)
 
-    with open(ANNOTATIONS_FILE, "w") as f:
+    with open(DELPHER_ANNOTATIONS_FILE, "w") as f:
         json.dump(annotations_dict, f)
 
     print_header("Early exit requested. Partial batch saved to JSON. Wrapping up...")
@@ -377,7 +371,7 @@ else:
     for idx, lbl in zip(queried_indices, current_labels):
         annotations_dict[str(idx)] = int(lbl)
 
-    with open(ANNOTATIONS_FILE, "w") as f:
+    with open(DELPHER_ANNOTATIONS_FILE, "w") as f:
         json.dump(annotations_dict, f)
 
 print(f"Total labeled: {len(active_learner.indices_labeled)}")
@@ -387,7 +381,7 @@ print("\nSaving the model and vectorizer...")
 final_model = active_learner.classifier.model  # type: ignore
 
 # Both the model and the vectorizer need to be saved for reproducibility
-joblib.dump(final_model, MODEL_FILE)
-joblib.dump(vectorizer, VECTORIZER_FILE)
+joblib.dump(final_model, DELPHER_MODEL_FILE)
+joblib.dump(vectorizer, DELPHER_VECTORIZER_FILE)
 
 print("Saved successfully!")
