@@ -2,3 +2,4 @@
 .venv
 *.joblib
 *.pkl
+__pycache__
