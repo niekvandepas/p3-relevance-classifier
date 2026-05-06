@@ -21,6 +21,7 @@ dependencies = [
     "regex==2026.4.4",
     "scikit-learn==1.8.0",
     "scipy==1.17.1",
+    "sentence-transformers>=5.4.1",
     "six==1.17.0",
     "small-text==1.4.1",
     "threadpoolctl==3.6.0",
