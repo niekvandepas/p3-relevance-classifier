@@ -121,7 +121,8 @@ KEYWORDS = (
     ]
 )
 
-KEYWORDS_PATTERN = re.compile(r"\b(" + "|".join(KEYWORDS) + r")\b", re.IGNORECASE)
+# KEYWORDS_PATTERN = re.compile(r"\b(" + "|".join(KEYWORDS) + r")\b", re.IGNORECASE)
+KEYWORDS_PATTERN = re.compile(r"De Nederlandse keuken", re.IGNORECASE)
 
 load_dotenv()
 
@@ -276,7 +277,7 @@ else:
         matches = set(m.lower() for m in KEYWORDS_PATTERN.findall(text))
         match_count = len(matches)
 
-        if match_count >= 4:
+        if match_count >= 1:
             candidate_indices.append(idx)
 
     print(
