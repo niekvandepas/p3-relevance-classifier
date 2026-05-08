@@ -3,3 +3,4 @@
 *.joblib
 *.pkl
 __pycache__
+artifacts/
