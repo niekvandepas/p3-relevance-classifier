@@ -1,0 +1,24 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Local data, models, and cache
+# These should be mounted as a network volume on RunPod, not baked into the image itself
+artifacts/
+annotations/
+*.ndjson
+*.json
+*.json.old
+
+# Environment variables (prevents leaking secrets into the container registry)
+.env
+
+# Git history
+.git/
+.gitignore
