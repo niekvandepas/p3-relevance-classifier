@@ -4,11 +4,14 @@ import re
 import shutil
 import textwrap
 import time
+import warnings
 
-from nltk.corpus import stopwords
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.naive_bayes import MultinomialNB
+
+from lightgbm import LGBMClassifier
+from sentence_transformers import SentenceTransformer
+import torch
+from tqdm import tqdm
 
 # small-text specific imports
 from small_text import (
@@ -29,8 +32,6 @@ from constants import (
     REDDIT_CACHE_FILE,
     REDDIT_LANGUAGE,
     REDDIT_MODEL_FILE,
-    REDDIT_STOP_WORDS,
-    REDDIT_VECTORIZER_FILE,
 )
 
 
@@ -121,8 +122,7 @@ KEYWORDS = (
     ]
 )
 
-# KEYWORDS_PATTERN = re.compile(r"\b(" + "|".join(KEYWORDS) + r")\b", re.IGNORECASE)
-KEYWORDS_PATTERN = re.compile(r"De Nederlandse keuken", re.IGNORECASE)
+KEYWORDS_PATTERN = re.compile(r"\b(" + "|".join(KEYWORDS) + r")\b", re.IGNORECASE)
 
 load_dotenv()
 
@@ -143,6 +143,8 @@ Path("artifacts/models").mkdir(parents=True, exist_ok=True)
 Path("artifacts/cache").mkdir(parents=True, exist_ok=True)
 Path("annotations").mkdir(parents=True, exist_ok=True)
 
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
+
 # ==========================================
 # 1. Load and Prepare the Data
 # ==========================================
@@ -150,12 +152,14 @@ Path("annotations").mkdir(parents=True, exist_ok=True)
 if os.path.exists(REDDIT_CACHE_FILE):
     start_time = time.time()
 
-    print_header("Loading cached texts and vectorizer from disk...")
-    cached_data = joblib.load(REDDIT_CACHE_FILE)
+    print_header("Loading cached texts and embeddings from disk...")
+    cached_data = joblib.load(
+        REDDIT_CACHE_FILE,
+        mmap_mode="c", # Read embeddings from disk rather than dumping 30GB into RAM.
+    )
     raw_texts: list[str] = cached_data["raw_texts"]
     pool_labels = cached_data["pool_labels"]
-    x_features = cached_data["x_features"]
-    vectorizer = cached_data["vectorizer"]
+    x_embeddings = cached_data["x_embeddings"]
     y_labels = np.array(pool_labels)
 
     print(f"Loaded cached data in {time.time() - start_time:.2f} seconds!")
@@ -164,7 +168,7 @@ else:
     print_header("Parsing JSON")
 
     raw_texts: list[str] = []
-    pool_labels = []
+    pool_labels: list[int] = []
 
     total_lines = 10651836 if LANGUAGE == "nl" else 4257108  # Output of wc -l
 
@@ -193,37 +197,64 @@ else:
                 raw_texts.append(text)
                 pool_labels.append(LABEL_UNLABELED)
 
-    print_header("Computing TF-IDF")
+    print_header("Computing RoBBERT Embeddings (This will take a while!)")
 
-    # Vectorize the text using TF-IDF, ignoring stopwords and words that appear in more than 50% of docs or fewer than 5 times total.
-    vectorizer = TfidfVectorizer(
-        max_features=10000, stop_words=REDDIT_STOP_WORDS, max_df=0.5, min_df=5
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cpu"
+
+    print(f"Using device: {device}")
+
+    robbert_model = SentenceTransformer(
+        "NetherlandsForensicInstitute/robbert-2022-dutch-sentence-transformers",
+        device=device,
     )
-    x_features = vectorizer.fit_transform(raw_texts)
+
+    BATCH_SIZE = 5000
+    embeddings_list: list[torch.Tensor] = []
+
+    for i in tqdm(range(0, len(raw_texts), BATCH_SIZE), desc="Encoding batches"):
+        batch = raw_texts[i : i + BATCH_SIZE]
+        batch_emb = robbert_model.encode(batch, show_progress_bar=False)
+        embeddings_list.append(batch_emb)
+
+    # Stack the list of batches into a single numpy array
+    x_embeddings = np.vstack(embeddings_list)
 
     y_labels = np.array(pool_labels)
 
-    print_header("Saving parsed data and vectorizer to cache...")
+    print_header("Saving parsed data and embeddings to cache...")
     joblib.dump(
         {
             "raw_texts": raw_texts,
             "pool_labels": pool_labels,
-            "x_features": x_features,
-            "vectorizer": vectorizer,
+            "x_embeddings": x_embeddings,
         },
         REDDIT_CACHE_FILE,
     )
 
 # Wrap the data in small-text's specific SklearnDataset format
 target_labels = np.array([0, 1])
-train_dataset = SklearnDataset(x_features, y_labels, target_labels=target_labels)
+train_dataset = SklearnDataset(x_embeddings, y_labels, target_labels=target_labels)
 
 
 # ==========================================
 # 2. Set up the Active Learner
 # ==========================================
 
-classifier_factory = SklearnClassifierFactory(MultinomialNB(), num_classes=2)
+lgbm_model = LGBMClassifier(
+    boosting_type="gbdt",
+    num_leaves=31,
+    learning_rate=0.05,
+    n_estimators=200,
+    class_weight="balanced",
+    n_jobs=-1,
+    verbosity=-1,
+)
+classifier_factory = SklearnClassifierFactory(lgbm_model, num_classes=2)
 
 # 'LeastConfidence' mathematically picks the items the model is most unsure about
 query_strategy = LeastConfidence()
@@ -277,7 +308,7 @@ else:
         matches = set(m.lower() for m in KEYWORDS_PATTERN.findall(text))
         match_count = len(matches)
 
-        if match_count >= 1:
+        if match_count >= 4:
             candidate_indices.append(idx)
 
     print(
@@ -386,12 +417,10 @@ else:
 
 print(f"Total labeled: {len(annotations_dict)}")
 
-print("\nSaving the model and vectorizer...")
+print("\nSaving the model...")
 
 final_model = active_learner.classifier.model  # type: ignore
 
-# Both the model and the vectorizer need to be saved for reproducibility
 joblib.dump(final_model, REDDIT_MODEL_FILE)
-joblib.dump(vectorizer, REDDIT_VECTORIZER_FILE)
 
 print("Saved successfully!")

@@ -24,12 +24,6 @@ DELPHER_ANNOTATIONS_FILE = Path("annotations") / DELPHER_ANNOTATIONS_FILE_NAME
 
 REDDIT_LANGUAGE = "nl"
 
-REDDIT_STOP_WORDS = (
-    list(set(stopwords.words("dutch")).union({"mijn", "ik", "zijn", "was", "we"}))
-    if REDDIT_LANGUAGE == "nl"
-    else list(set(stopwords.words("english")))
-)
-
 REDDIT_MODEL_FILE_NAME = f"reddit_relevance_model.{REDDIT_LANGUAGE}.pkl"
 REDDIT_MODEL_FILE = Path("artifacts/models") / REDDIT_MODEL_FILE_NAME
 
