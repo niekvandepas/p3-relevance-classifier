@@ -14,6 +14,7 @@ dependencies = [
     "lightgbm>=4.6.0",
     "nltk==3.9.4",
     "numpy==2.4.4",
+    "ollama>=0.6.2",
     "packaging==26.1",
     "pandas==3.0.2",
     "pybind11==3.0.3",
