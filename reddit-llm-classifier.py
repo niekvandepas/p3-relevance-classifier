@@ -1,8 +1,10 @@
+from datetime import datetime
 import json
 from pathlib import Path
 import random
 from typing import TypedDict
 
+from huggingface_hub import hf_hub_download
 from ollama import chat
 from ollama import ChatResponse
 import ollama
@@ -36,6 +38,24 @@ def import_random_items_from(data_file: Path, limit: int) -> list[RedditItem]:
                 break
 
     return results
+
+
+def get_data_path(file_type: str, language: str) -> Path:
+    """
+    Returns a Path to the local cached version of the HuggingFace file.
+    file_type: 'posts' or 'comments'
+    language: 'en' or 'nl'
+    """
+    filename = f"reddit-{language}-{file_type}.ndjson"
+
+    # This will download the file if missing, or return the path if it exists
+    cached_path = hf_hub_download(
+        repo_id="niekvdpas/reddit-languages-data",
+        filename=filename,
+        repo_type="dataset",
+    )
+
+    return Path(cached_path)
 
 
 # TODO update this prompt for the real analysis
@@ -114,17 +134,35 @@ def main():
     print("Model is ready!")
 
     # ========== Data import ===========
-    REDDIT_DATA_FOLDER = os.getenv("REDDIT_DATA_FOLDER")
 
-    if not REDDIT_DATA_FOLDER:
+    LLM_REDDIT_DATA_SOURCE = os.environ.get("LLM_REDDIT_DATA_SOURCE")
+
+    if LLM_REDDIT_DATA_SOURCE is None:
         raise ValueError(
-            "Please set the REDDIT_DATA_FOLDER environment variable in your .env file."
+            "LLM_REDDIT_DATA_SOURCE environment variable not set. Please set it to 'huggingface' or 'local' in your .env file."
         )
 
-    reddit_posts_data_filename = f"reddit-{REDDIT_LANGUAGE}-posts.ndjson"
-    reddit_posts_data_path = Path(REDDIT_DATA_FOLDER) / reddit_posts_data_filename
-    reddit_comments_data_filename = f"reddit-{REDDIT_LANGUAGE}-comments.ndjson"
-    reddit_comments_data_path = Path(REDDIT_DATA_FOLDER) / reddit_comments_data_filename
+    if LLM_REDDIT_DATA_SOURCE == "huggingface":
+        print("Fetching data from HuggingFace Hub (or cache if available)")
+        reddit_posts_data_path = get_data_path("posts", REDDIT_LANGUAGE)
+        reddit_comments_data_path = get_data_path("comments", REDDIT_LANGUAGE)
+    elif LLM_REDDIT_DATA_SOURCE == "local":
+        REDDIT_DATA_FOLDER = os.getenv("REDDIT_DATA_FOLDER")
+
+        if not REDDIT_DATA_FOLDER:
+            raise ValueError(
+                "Please set the REDDIT_DATA_FOLDER environment variable in your .env file."
+            )
+        reddit_posts_data_filename = f"reddit-{REDDIT_LANGUAGE}-posts.ndjson"
+        reddit_posts_data_path = Path(REDDIT_DATA_FOLDER) / reddit_posts_data_filename
+        reddit_comments_data_filename = f"reddit-{REDDIT_LANGUAGE}-comments.ndjson"
+        reddit_comments_data_path = (
+            Path(REDDIT_DATA_FOLDER) / reddit_comments_data_filename
+        )
+    else:
+        raise ValueError(
+            f"Unsupported LLM_REDDIT_DATA_SOURCE: {LLM_REDDIT_DATA_SOURCE}. Supported values are 'huggingface' and 'local'."
+        )
 
     # Import equal number of posts and comments
     posts = import_random_items_from(reddit_posts_data_path, int(DATA_IMPORT_LIMIT / 2))
@@ -134,23 +172,40 @@ def main():
 
     all_items = posts + comments
 
-    for item in tqdm(all_items):
-        messages = build_prompt(item["text"], REDDIT_LANGUAGE)
+    safe_model_name = LLM_NAME.replace("/", "-").replace(":", "-")
 
-        response: ChatResponse = chat(
-            model=LLM_NAME,
-            messages=messages,
-            # Force deterministic output
-            options={"temperature": 0},
-        )
+    results_file = (
+        Path("artifacts")
+        / "results"
+        / f"results-{REDDIT_LANGUAGE}-{safe_model_name}-{datetime.now().strftime('%Y%m%d-%H%M')}.ndjson"
+    )
+    results_file.parent.mkdir(parents=True, exist_ok=True)
 
-        classification = response.message.content.strip()  # type: ignore
-        tqdm.write(f"Text: {item['text'][:50]}... | Result: {classification}")
+    print(f"Starting classification with {LLM_NAME}")
 
+    with open(results_file, "w", encoding="utf-8", buffering=1) as f_out:
+        for item in tqdm(all_items):
+            messages = build_prompt(item["text"], REDDIT_LANGUAGE)
 
-    print(response["message"]["content"])
-    # or access fields directly from the response object
-    print(response.message.content)
+            response: ChatResponse = chat(
+                model=LLM_NAME,
+                messages=messages,
+                # Force deterministic output
+                options={"temperature": 0},
+            )
+
+            classification = response.message.content.strip()  # type: ignore
+
+            output_data = {
+                "id": item["id"],
+                "model": LLM_NAME,
+                "label": classification,
+                "text": item["text"],
+            }
+
+            f_out.write(json.dumps(output_data) + "\n")
+
+    print(f"Analysis complete. Results saved to {results_file}")
 
 
 if __name__ == "__main__":
