@@ -21,18 +21,12 @@ class RedditItem(TypedDict):
     text: str
 
 
-def import_random_items_from(data_file: Path, limit: int) -> list[RedditItem]:
-    with open(data_file, "r", encoding="utf-8") as f:
-        total_lines = sum(1 for _ in f)
-    indices_to_pick = set(random.sample(range(total_lines), min(limit, total_lines)))
-
+def import_data(data_file: Path, limit: int | None = None) -> list[RedditItem]:
     results = []
 
-    # Re-open the file because otherwise we'd have to seek back manually
     with open(data_file, "r", encoding="utf-8") as f:
-        for i, line in enumerate(f, 1):
-            if i in indices_to_pick:
-                results.append(json.loads(line))
+        for line in f:
+            results.append(json.loads(line))
 
             if len(results) == limit:
                 break
@@ -46,7 +40,7 @@ def get_data_path(file_type: str, language: str) -> Path:
     file_type: 'posts' or 'comments'
     language: 'en' or 'nl'
     """
-    filename = f"reddit-{language}-{file_type}.ndjson"
+    filename = f"reddit-{language}-{file_type}-sample_10000.ndjson"
 
     # This will download the file if missing, or return the path if it exists
     cached_path = hf_hub_download(
@@ -153,9 +147,13 @@ def main():
             raise ValueError(
                 "Please set the REDDIT_DATA_FOLDER environment variable in your .env file."
             )
-        reddit_posts_data_filename = f"reddit-{REDDIT_LANGUAGE}-posts.ndjson"
+        reddit_posts_data_filename = (
+            f"reddit-{REDDIT_LANGUAGE}-posts-sample_10000.ndjson"
+        )
         reddit_posts_data_path = Path(REDDIT_DATA_FOLDER) / reddit_posts_data_filename
-        reddit_comments_data_filename = f"reddit-{REDDIT_LANGUAGE}-comments.ndjson"
+        reddit_comments_data_filename = (
+            f"reddit-{REDDIT_LANGUAGE}-comments-sample_10000.ndjson"
+        )
         reddit_comments_data_path = (
             Path(REDDIT_DATA_FOLDER) / reddit_comments_data_filename
         )
@@ -165,10 +163,8 @@ def main():
         )
 
     # Import equal number of posts and comments
-    posts = import_random_items_from(reddit_posts_data_path, int(DATA_IMPORT_LIMIT / 2))
-    comments = import_random_items_from(
-        reddit_comments_data_path, int(DATA_IMPORT_LIMIT / 2)
-    )
+    posts = import_data(reddit_posts_data_path)
+    comments = import_data(reddit_comments_data_path)
 
     all_items = posts + comments
 
