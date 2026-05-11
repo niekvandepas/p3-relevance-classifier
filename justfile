@@ -9,4 +9,8 @@ push:
     docker push ghcr.io/niekvandepas/p3-relevance-classifier:latest
 
 run:
-    docker run --platform=linux/amd64 -it ghcr.io/niekvandepas/p3-relevance-classifier:latest /bin/bash
+    docker run \
+        --platform=linux/amd64 \
+        -e HF_TOKEN="$HF_TOKEN" \
+        -it niekpas/p3-relevance-classifier:latest \
+        /bin/bash
