@@ -2,8 +2,10 @@ from datetime import datetime
 import json
 from pathlib import Path
 import random
+import time
 from typing import TypedDict
 
+import httpx
 from huggingface_hub import hf_hub_download
 from ollama import chat
 from ollama import ChatResponse
@@ -104,14 +106,10 @@ Respond STRICTLY with a single digit: 1 or 0. Do not explain your reasoning."""
 def main():
     load_dotenv()
 
-    DATA_IMPORT_LIMIT = os.environ.get("LLM_ANALYSIS_DATA_IMPORT_LIMIT")
-
-    if not DATA_IMPORT_LIMIT:
+    if not os.environ.get("HF_TOKEN"):
         raise ValueError(
-            "LLM_ANALYSIS_DATA_IMPORT_LIMIT environment variable not set. Please set it in your .env file."
+            "HF_TOKEN environment variable not set. Please set it in your .env file with a HuggingFace API token."
         )
-
-    DATA_IMPORT_LIMIT = int(DATA_IMPORT_LIMIT)
 
     # =========== Ollama setup ===========
     LLM_NAME = os.environ.get("LLM_NAME")
@@ -120,6 +118,19 @@ def main():
         raise ValueError(
             "LLM_NAME environment variable not set. Please set it in your .env file."
         )
+
+    print("Waiting for Ollama server to be ready...")
+    server_ready = False
+    for _ in range(15):
+        try:
+            httpx.get("http://127.0.0.1:11434")
+            server_ready = True
+            break
+        except httpx.ConnectError:
+            time.sleep(1)
+
+    if not server_ready:
+        raise ConnectionError("Ollama server is not running. Did 'ollama serve' start?")
 
     print(
         f"Ensuring model '{LLM_NAME}' is downloaded (this may take a few minutes the first time)..."
