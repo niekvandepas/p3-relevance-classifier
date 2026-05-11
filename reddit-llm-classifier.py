@@ -54,7 +54,6 @@ def get_data_path(file_type: str, language: str) -> Path:
     return Path(cached_path)
 
 
-# TODO update this prompt for the real analysis
 def build_prompt(reddit_text: str, language: str) -> list:
     if language not in ["en", "nl"]:
         raise ValueError(
@@ -64,7 +63,7 @@ def build_prompt(reddit_text: str, language: str) -> list:
     if language == "nl":
         system_prompt = """Je bent een Nederlandse antropoloog die nationale identiteit en voedselcultuur bestudeert.
 
-Je taak is om te bepalen of een tekst letterlijk over Nederlandse voedselcultuur of eetpraktijken gaat in relatie tot identiteit.
+Je taak is om te bepalen of een tekst letterlijk over Nederlandse voedselcultuur of eetpraktijken gaat.
 
 CRITERIA:
 
@@ -73,6 +72,34 @@ CRITERIA:
 - IRRELEVANT (0): Voedselidiomen (bijv. "andere koek", "boter op het hoofd"), metaforen, boodschappenlijstjes of niet-gerelateerde onderwerpen.
 
 Antwoord STRIKT met één cijfer: 1 of 0. Geen uitleg."""
+
+        return [
+            {
+                "role": "system",
+                "content": system_prompt,
+            },
+            {
+                "role": "user",
+                "content": "De Nederlandse keuken (veel aardappelen, groenten etc) is niet bijzonder, maar wel beter dan de Amerikaanse. De cuisines van deze twee landen staan ergens onderaan de lijst.",
+            },
+            {"role": "assistant", "content": "1"},
+            {
+                "role": "user",
+                "content": "De nieuwe wetgeving is echt andere koek, de overheid heeft boter op haar hoofd.",
+            },
+            {"role": "assistant", "content": "0"},
+            {
+                "role": "user",
+                "content": "Ik heb net vier kaassoufflés bij de Febo gehaald, was 10 euro.",
+            },
+            {"role": "assistant", "content": "0"},
+            {
+                "role": "user",
+                "content": "Ja, stamppot, maar of dat nou echt lekker te noemen is...",
+            },
+            {"role": "assistant", "content": "1"},
+            {"role": "user", "content": f"{reddit_text}"},
+        ]
 
     elif language == "en":
         system_prompt = """You are a Dutch Anthropologist studying national identity and food culture.
@@ -84,23 +111,33 @@ CRITERIA:
 
 Respond STRICTLY with a single digit: 1 or 0. Do not explain your reasoning."""
 
-    return [
-        {
-            "role": "system",
-            "content": system_prompt,
-        },
-        {
-            "role": "user",
-            "content": "Ik vind dat we op pakjesavond gewoon pepernoten en marsepein moeten eten, dat is traditie.",
-        },
-        {"role": "assistant", "content": "1"},
-        {
-            "role": "user",
-            "content": "De nieuwe wetgeving is echt andere koek, de overheid heeft boter op haar hoofd.",
-        },
-        {"role": "assistant", "content": "0"},
-        {"role": "user", "content": f"{reddit_text}"},
-    ]
+        return [
+            {
+                "role": "system",
+                "content": system_prompt,
+            },
+            {
+                "role": "user",
+                "content": "Dutch cuisine is really nothing special in my opinion.",
+            },
+            {"role": "assistant", "content": "1"},
+            {
+                "role": "user",
+                "content": "They really had egg on their face when that happpened.",
+            },
+            {"role": "assistant", "content": "0"},
+            {
+                "role": "user",
+                "content": "I just went out to dinner and paid €70... food prices are getting out of hand.",
+            },
+            {"role": "assistant", "content": "0"},
+            {
+                "role": "user",
+                "content": "Sure, stamppot, but does anybody actually like that?",
+            },
+            {"role": "assistant", "content": "1"},
+            {"role": "user", "content": f"{reddit_text}"},
+        ]
 
 
 def main():
