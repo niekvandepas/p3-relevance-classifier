@@ -20,7 +20,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen
 
 # Default values for .env
-RUN printf "LLM_NAME=bramvanroy/geitje-7b-ultra:q8_0\nLLM_REDDIT_DATA_SOURCE=huggingface\n" > .env
+RUN printf "LLM_NAME=bramvanroy/geitje-7b-ultra:q8_0\nLLM_REDDIT_DATA_SOURCE=huggingface\nHF_TOKEN=<token>\n" > .env
 
 # Copy the rest of your project files
 COPY . .
