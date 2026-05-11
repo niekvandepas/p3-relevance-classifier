@@ -42,7 +42,7 @@ def get_data_path(file_type: str, language: str) -> Path:
     file_type: 'posts' or 'comments'
     language: 'en' or 'nl'
     """
-    filename = f"reddit-{language}-{file_type}-sample_10000.ndjson"
+    filename = f"reddit-{language}-{file_type}-sample_5000.ndjson"
 
     # This will download the file if missing, or return the path if it exists
     cached_path = hf_hub_download(
@@ -196,11 +196,11 @@ def main():
                 "Please set the REDDIT_DATA_FOLDER environment variable in your .env file."
             )
         reddit_posts_data_filename = (
-            f"reddit-{REDDIT_LANGUAGE}-posts-sample_10000.ndjson"
+            f"reddit-{REDDIT_LANGUAGE}-posts-sample_5000.ndjson"
         )
         reddit_posts_data_path = Path(REDDIT_DATA_FOLDER) / reddit_posts_data_filename
         reddit_comments_data_filename = (
-            f"reddit-{REDDIT_LANGUAGE}-comments-sample_10000.ndjson"
+            f"reddit-{REDDIT_LANGUAGE}-comments-sample_5000.ndjson"
         )
         reddit_comments_data_path = (
             Path(REDDIT_DATA_FOLDER) / reddit_comments_data_filename
