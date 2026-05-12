@@ -14,3 +14,21 @@ run:
         -e HF_TOKEN="$HF_TOKEN" \
         -it niekpas/p3-relevance-classifier:latest \
         /bin/bash
+
+build-vllm:
+    docker buildx build \
+        --platform linux/amd64 \
+        -f Dockerfile.vllm \
+        -t niekpas/reddit-llm-classifier:latest \
+        .
+    docker tag niekpas/reddit-llm-classifier:latest ghcr.io/niekvandepas/reddit-llm-classifier:latest
+
+push-vllm:
+    docker push niekpas/reddit-llm-classifier:latest
+    docker push ghcr.io/niekvandepas/reddit-llm-classifier:latest
+
+run-vllm:
+    docker run \
+        --platform=linux/amd64 \
+        -e HF_TOKEN="$HF_TOKEN" \
+        -t niekpas/reddit-llm-classifier:latest \

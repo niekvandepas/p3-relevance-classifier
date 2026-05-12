@@ -1,0 +1,29 @@
+# This Dockerfile is used for reddit-llm-analysis.py.
+# It uses a different setup from the rest of the codebase,
+# because `vllm` does not play nice with `uv`.
+# Thus, for the LLM analysis, we use a pre-baked vllm image with system python,
+# rather than a nicely managed `uv` environment.
+
+# 1. The Engine
+FROM vllm/vllm-openai:v0.20.1-cu129-ubuntu2404
+
+# Nuke the default entrypoint
+ENTRYPOINT []
+
+# Install Vim for editing files in a pinch
+RUN apt-get update && \
+    apt-get install -y vim && \
+    rm -rf /var/lib/apt/lists/*
+
+# 3. The Code (Moved to /app to avoid RunPod's volume mount)
+WORKDIR /app
+COPY ./reddit-llm-classifier.py /app
+COPY ./constants.py .
+
+# Default values for .env
+RUN printf "LLM_NAME=BramVanroy/GEITje-7B-ultra\nLLM_REDDIT_DATA_SOURCE=huggingface\nNUM_GPUS=1\n" > .env
+
+
+# 4. Run the script
+CMD ["python3", "reddit-llm-classifier.py"]
+# CMD []

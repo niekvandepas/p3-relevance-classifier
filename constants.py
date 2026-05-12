@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-from nltk.corpus import stopwords
 from dotenv import load_dotenv
 
 load_dotenv()

@@ -5,11 +5,12 @@ import random
 import time
 from typing import TypedDict
 
-import httpx
 from huggingface_hub import hf_hub_download
-from ollama import chat
-from ollama import ChatResponse
-import ollama
+
+# vllm does not build on macOS, so silence import error
+from vllm import LLM, SamplingParams  # type: ignore
+from transformers import AutoTokenizer
+
 from dotenv import load_dotenv
 import os
 
@@ -42,6 +43,7 @@ def get_data_path(file_type: str, language: str) -> Path:
     file_type: 'posts' or 'comments'
     language: 'en' or 'nl'
     """
+    # TODO hier dan dus de nieuwe sample van 2000 met keywords
     filename = f"reddit-{language}-{file_type}-sample_5000.ndjson"
 
     # This will download the file if missing, or return the path if it exists
@@ -55,11 +57,6 @@ def get_data_path(file_type: str, language: str) -> Path:
 
 
 def build_prompt(reddit_text: str, language: str) -> list:
-    if language not in ["en", "nl"]:
-        raise ValueError(
-            f"Unsupported language: {language}. Supported languages are 'en' and 'nl'."
-        )
-
     if language == "nl":
         system_prompt = """Je bent een Nederlandse antropoloog die nationale identiteit en voedselcultuur bestudeert.
 
@@ -138,6 +135,10 @@ Respond STRICTLY with a single digit: 1 or 0. Do not explain your reasoning."""
             {"role": "assistant", "content": "1"},
             {"role": "user", "content": f"{reddit_text}"},
         ]
+    else:
+        raise ValueError(
+            f"Unsupported language: {language}. Supported languages are 'en' and 'nl'."
+        )
 
 
 def main():
@@ -148,7 +149,6 @@ def main():
             "HF_TOKEN environment variable not set. Please set it in your .env file with a HuggingFace API token."
         )
 
-    # =========== Ollama setup ===========
     LLM_NAME = os.environ.get("LLM_NAME")
 
     if not LLM_NAME:
@@ -156,24 +156,15 @@ def main():
             "LLM_NAME environment variable not set. Please set it in your .env file."
         )
 
-    print("Waiting for Ollama server to be ready...")
-    server_ready = False
-    for _ in range(15):
-        try:
-            httpx.get("http://127.0.0.1:11434")
-            server_ready = True
-            break
-        except httpx.ConnectError:
-            time.sleep(1)
+    NUM_GPUS = os.environ.get("NUM_GPUS")
+    if not NUM_GPUS:
+        raise ValueError(
+            "NUM_GPUS environment variable not set. Please set it in your .env file to the number of GPUs you want to use (e.g., 1, 2, 4)."
+        )
 
-    if not server_ready:
-        raise ConnectionError("Ollama server is not running. Did 'ollama serve' start?")
+    NUM_GPUS = int(NUM_GPUS)
 
-    print(
-        f"Ensuring model '{LLM_NAME}' is downloaded (this may take a few minutes the first time)..."
-    )
-    ollama.pull(LLM_NAME)
-    print("Model is ready!")
+    print(f"Using LLM: {LLM_NAME} with {NUM_GPUS} GPU(s)")
 
     # ========== Data import ===========
 
@@ -218,6 +209,8 @@ def main():
 
     safe_model_name = LLM_NAME.replace("/", "-").replace(":", "-")
 
+    # TODO next step is create keyword filtered 'sample_2000' file so LLM has a somewhat balanced dataset. can probably do "de nederlandse keuken" OR [keywords > more than 3 or whatever. one-off python script for that.] even just 'De nederlandse keuken' had like 250 items so it's fine.
+
     results_file = (
         Path("artifacts")
         / "results"
@@ -225,20 +218,31 @@ def main():
     )
     results_file.parent.mkdir(parents=True, exist_ok=True)
 
-    print(f"Starting classification with {LLM_NAME}")
+    # Configure generation parameters (temperature 0 for determinism, max_tokens 2 for strict output)
+    sampling_params = SamplingParams(temperature=0.0, max_tokens=2)
 
+    tokenizer = AutoTokenizer.from_pretrained(LLM_NAME)
+    llm = LLM(model=LLM_NAME, tensor_parallel_size=NUM_GPUS)
+
+    print(f"Applying chat templates to {len(all_items)} items...")
+    formatted_prompts = []
+
+    for item in tqdm(all_items, desc="Formatting"):
+        messages = build_prompt(item["text"], REDDIT_LANGUAGE)
+        formatted_prompt = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        formatted_prompts.append(formatted_prompt)
+
+    print(f"Starting batch classification with {LLM_NAME}...")
+
+    # Pass the entire list at once. vLLM will handle internal continuous batching automatically.
+    outputs = llm.generate(formatted_prompts, sampling_params)
+
+    print("Writing results to disk...")
     with open(results_file, "w", encoding="utf-8", buffering=1) as f_out:
-        for item in tqdm(all_items):
-            messages = build_prompt(item["text"], REDDIT_LANGUAGE)
-
-            response: ChatResponse = chat(
-                model=LLM_NAME,
-                messages=messages,
-                # Force deterministic output
-                options={"temperature": 0},
-            )
-
-            classification = response.message.content.strip()  # type: ignore
+        for item, output in zip(all_items, outputs):
+            classification = output.outputs[0].text.strip()
 
             output_data = {
                 "id": item["id"],
