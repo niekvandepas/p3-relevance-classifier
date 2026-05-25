@@ -1,14 +1,14 @@
+print("Importing modules")
 from datetime import datetime
 import json
 from pathlib import Path
-import random
-import time
-from typing import TypedDict
-
 from huggingface_hub import hf_hub_download
 
 # vllm does not build on macOS, so silence import error
+from project_types import RedditItem
 from vllm import LLM, SamplingParams  # type: ignore
+from vllm.sampling_params import StructuredOutputsParams  # type: ignore
+
 from transformers import AutoTokenizer
 
 from dotenv import load_dotenv
@@ -17,11 +17,6 @@ import os
 from tqdm import tqdm
 
 from constants import REDDIT_LANGUAGE
-
-
-class RedditItem(TypedDict):
-    id: str
-    text: str
 
 
 def import_data(data_file: Path, limit: int | None = None) -> list[RedditItem]:
@@ -43,8 +38,7 @@ def get_data_path(file_type: str, language: str) -> Path:
     file_type: 'posts' or 'comments'
     language: 'en' or 'nl'
     """
-    # TODO hier dan dus de nieuwe sample van 2000 met keywords
-    filename = f"reddit-{language}-{file_type}-sample_5000.ndjson"
+    filename = f"reddit-{language}-{file_type}-filtered_NLsekeuken-eten-culinair.ndjson"
 
     # This will download the file if missing, or return the path if it exists
     cached_path = hf_hub_download(
@@ -142,6 +136,7 @@ Respond STRICTLY with a single digit: 1 or 0. Do not explain your reasoning."""
 
 
 def main():
+    print("In main() function")
     load_dotenv()
 
     if not os.environ.get("HF_TOKEN"):
@@ -209,8 +204,6 @@ def main():
 
     safe_model_name = LLM_NAME.replace("/", "-").replace(":", "-")
 
-    # TODO next step is create keyword filtered 'sample_2000' file so LLM has a somewhat balanced dataset. can probably do "de nederlandse keuken" OR [keywords > more than 3 or whatever. one-off python script for that.] even just 'De nederlandse keuken' had like 250 items so it's fine.
-
     results_file = (
         Path("artifacts")
         / "results"
@@ -218,8 +211,12 @@ def main():
     )
     results_file.parent.mkdir(parents=True, exist_ok=True)
 
+    structured_params = StructuredOutputsParams(choice=["0", "1"])
+
     # Configure generation parameters (temperature 0 for determinism, max_tokens 2 for strict output)
-    sampling_params = SamplingParams(temperature=0.0, max_tokens=2)
+    sampling_params = SamplingParams(
+        temperature=0.0, max_tokens=2, structured_outputs=structured_params
+    )
 
     tokenizer = AutoTokenizer.from_pretrained(LLM_NAME)
     llm = LLM(model=LLM_NAME, tensor_parallel_size=NUM_GPUS)
@@ -228,7 +225,14 @@ def main():
     formatted_prompts = []
 
     for item in tqdm(all_items, desc="Formatting"):
-        messages = build_prompt(item["text"], REDDIT_LANGUAGE)
+        if LLM_NAME == "BramVanroy/fietje-2-chat":
+            item_text = item["text"][
+                :2040
+            ]  # Fietje has a 2048 token limit, so we truncate to be safe. We will recover the full text later in the analysis phase.
+        else:
+            item_text = item["text"]
+
+        messages = build_prompt(item_text, REDDIT_LANGUAGE)
         formatted_prompt = tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
         )

@@ -31,4 +31,5 @@ run-vllm:
     docker run \
         --platform=linux/amd64 \
         -e HF_TOKEN="$HF_TOKEN" \
-        -t niekpas/reddit-llm-classifier:latest \
+        -it niekpas/reddit-llm-classifier:latest \
+        /bin/bash

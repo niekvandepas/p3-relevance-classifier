@@ -25,5 +25,5 @@ RUN printf "LLM_NAME=BramVanroy/GEITje-7B-ultra\nLLM_REDDIT_DATA_SOURCE=huggingf
 
 
 # 4. Run the script
-CMD ["python3", "reddit-llm-classifier.py"]
-# CMD []
+# CMD ["python3", "reddit-llm-classifier.py"]
+CMD []
