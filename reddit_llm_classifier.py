@@ -196,7 +196,6 @@ def main():
             f"Unsupported LLM_REDDIT_DATA_SOURCE: {LLM_REDDIT_DATA_SOURCE}. Supported values are 'huggingface' and 'local'."
         )
 
-    # Import equal number of posts and comments
     posts = import_data(reddit_posts_data_path)
     comments = import_data(reddit_comments_data_path)
 
