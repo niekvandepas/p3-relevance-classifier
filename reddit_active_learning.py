@@ -6,10 +6,8 @@ import warnings
 
 import numpy as np
 
-from lightgbm import LGBMClassifier
-from sentence_transformers import SentenceTransformer
-import torch
-from tqdm import tqdm
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
 
 # small-text specific imports
 from small_text import (
@@ -23,13 +21,17 @@ from small_text.query_strategies import LeastConfidence
 
 import joblib
 from dotenv import load_dotenv
+
 import os
+from huggingface_hub import hf_hub_download
 
 from constants import (
     REDDIT_ANNOTATIONS_FILE,
     REDDIT_CACHE_FILE,
     REDDIT_LANGUAGE,
     REDDIT_MODEL_FILE,
+    REDDIT_STOP_WORDS,
+    REDDIT_VECTORIZER_FILE,
 )
 from util import preview_text, print_divider, print_header
 
@@ -93,21 +95,28 @@ KEYWORDS = (
     ]
 )
 
-# KEYWORDS_PATTERN = re.compile(r"\b(" + "|".join(KEYWORDS) + r")\b", re.IGNORECASE)
-KEYWORDS_PATTERN = re.compile(r"De Nederlandse keuken", re.IGNORECASE)
+KEYWORDS_PATTERN = re.compile(r"\b(" + "|".join(KEYWORDS) + r")\b", re.IGNORECASE)
 
 load_dotenv()
 
-REDDIT_DATA_FOLDER = os.getenv("REDDIT_DATA_FOLDER")
+HF_REPO_ID = os.environ.get("HF_REPO_ID", "YOUR_HF_REPO_ID")  # Set this in your .env
+HF_TOKEN = os.environ.get("HF_TOKEN")  # Set this in your .env
 
-if not REDDIT_DATA_FOLDER:
-    raise ValueError(
-        "Please set the REDDIT_DATA_FOLDER environment variable in your .env file."
+
+def get_data_path(file_type: str, language: str) -> Path:
+    """
+    Returns a Path to the local cached version of the HuggingFace file.
+    file_type: 'posts' or 'comments'
+    language: 'en' or 'nl'
+    """
+    filename = f"reddit-{language}-{file_type}.ndjson"
+
+    # This will download the file if missing, or return the path if it exists
+    cached_path = hf_hub_download(
+        repo_id=HF_REPO_ID, filename=filename, repo_type="dataset", token=HF_TOKEN
     )
 
-REDDIT_DATA_FILENAME = f"reddit-{REDDIT_LANGUAGE}.ndjson"
-
-REDDIT_DATA_PATH = Path(REDDIT_DATA_FOLDER) / REDDIT_DATA_FILENAME
+    return Path(cached_path)
 
 
 # Ensure directories exist before trying to read/write files
@@ -124,109 +133,78 @@ warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 if os.path.exists(REDDIT_CACHE_FILE):
     start_time = time.time()
 
-    print_header("Loading cached texts and embeddings from disk...")
-    cached_data = joblib.load(
-        REDDIT_CACHE_FILE,
-        mmap_mode="c",  # Read embeddings from disk rather than dumping 30GB into RAM.
-    )
+    print_header("Loading cached texts and features from disk...")
+    cached_data = joblib.load(REDDIT_CACHE_FILE)
+
+    item_ids: list[str] = cached_data["item_ids"]
     raw_texts: list[str] = cached_data["raw_texts"]
     pool_labels = cached_data["pool_labels"]
-    x_embeddings = cached_data["x_embeddings"]
+
+    x_features = cached_data["x_features"]
+    vectorizer = cached_data["vectorizer"]
+
     y_labels = np.array(pool_labels)
 
     print(f"Loaded cached data in {time.time() - start_time:.2f} seconds!")
 
 else:
-    print_header("Parsing JSON")
+    print_header("Downloading and Parsing HF JSON Data")
 
+    item_ids: list[str] = []
     raw_texts: list[str] = []
     pool_labels: list[int] = []
 
-    total_lines = 10651836 if LANGUAGE == "nl" else 4257108  # Output of wc -l
+    # Loop through both posts and comments files
+    for file_type in ["posts", "comments"]:
+        print(f"Processing {file_type}...")
+        data_path = get_data_path(file_type, LANGUAGE)
 
-    with open(REDDIT_DATA_PATH, "r", encoding="utf-8") as f:
-        for i, line in enumerate(f, 1):
-            if i % 100000 == 0:
-                print(
-                    f"Processed {i} out of {format(total_lines, ',')} lines ({i/total_lines:.1%})..."
-                )
-            item = json.loads(line)
+        with open(data_path, "r", encoding="utf-8") as f:
+            for line in f:
+                item = json.loads(line)
+                text = item.get("text", "")
 
-            text = ""
-            # If item is a comment, include it
-            if "body" in item:
-                text = item["body"]
+                # Only consider non-empty texts
+                if text.strip():
+                    item_ids.append(item["id"])
+                    raw_texts.append(text)
+                    pool_labels.append(LABEL_UNLABELED)
 
-            # If item is a submission, include it only if it has self text (e.g. skip link- or image-posts, which can't be feasibly labeled or analyzed).
-            elif "title" in item:
-                if item.get("selftext", "").strip():
-                    text = item["title"] + " " + item["selftext"]
-                else:
-                    continue
+    print(f"Total items parsed: {len(raw_texts)}")
 
-            # Only consider non-empty texts
-            if text.strip():
-                raw_texts.append(text)
-                pool_labels.append(LABEL_UNLABELED)
+    print_header("Computing TF-IDF")
 
-    print_header("Computing RoBBERT Embeddings (This will take a while!)")
-
-    if torch.cuda.is_available():
-        device = "cuda"
-    elif torch.backends.mps.is_available():
-        device = "mps"
-    else:
-        device = "cpu"
-
-    print(f"Using device: {device}")
-
-    robbert_model = SentenceTransformer(
-        "NetherlandsForensicInstitute/robbert-2022-dutch-sentence-transformers",
-        device=device,
+    vectorizer = TfidfVectorizer(
+        max_features=10000, stop_words=REDDIT_STOP_WORDS, max_df=0.5, min_df=5
     )
-
-    BATCH_SIZE = 5000
-    embeddings_list: list[torch.Tensor] = []
-
-    for i in tqdm(range(0, len(raw_texts), BATCH_SIZE), desc="Encoding batches"):
-        batch = raw_texts[i : i + BATCH_SIZE]
-        batch_emb = robbert_model.encode(batch, show_progress_bar=False)
-        embeddings_list.append(batch_emb)
-
-    # Stack the list of batches into a single numpy array
-    x_embeddings = np.vstack(embeddings_list)
+    x_features = vectorizer.fit_transform(raw_texts)
 
     y_labels = np.array(pool_labels)
 
-    print_header("Saving parsed data and embeddings to cache...")
+    print_header("Saving parsed data and vectorizer to cache...")
     joblib.dump(
         {
+            "item_ids": item_ids,
             "raw_texts": raw_texts,
             "pool_labels": pool_labels,
-            "x_embeddings": x_embeddings,
+            "x_features": x_features,
+            "vectorizer": vectorizer,
         },
         REDDIT_CACHE_FILE,
     )
 
 # Wrap the data in small-text's specific SklearnDataset format
 target_labels = np.array([0, 1])
-train_dataset = SklearnDataset(x_embeddings, y_labels, target_labels=target_labels)
 
+train_dataset = SklearnDataset(x_features, y_labels, target_labels=target_labels)
+
+id_to_index = {item_id: idx for idx, item_id in enumerate(item_ids)}
 
 # ==========================================
 # 2. Set up the Active Learner
 # ==========================================
 
-lgbm_model = LGBMClassifier(
-    boosting_type="gbdt",
-    num_leaves=31,
-    learning_rate=0.05,
-    n_estimators=200,
-    class_weight="balanced",
-    n_jobs=-1,
-    verbosity=-1,
-)
-classifier_factory = SklearnClassifierFactory(lgbm_model, num_classes=2)
+classifier_factory = SklearnClassifierFactory(MultinomialNB(), num_classes=2)
 
 # 'LeastConfidence' mathematically picks the items the model is most unsure about
 query_strategy = LeastConfidence()
@@ -251,20 +229,29 @@ if os.path.exists(REDDIT_ANNOTATIONS_FILE):
     with open(REDDIT_ANNOTATIONS_FILE, "r") as f:
         annotations_dict = json.load(f)
 
-    # Convert string keys from JSON back to integers
-    resumed_indices = np.array([int(k) for k in annotations_dict.keys()])
-    resumed_labels = np.array(list(annotations_dict.values()))
+    resumed_indices = []
+    resumed_labels = []
 
-    active_learner.initialize_data(resumed_indices, resumed_labels)
+    for saved_id, label in annotations_dict.items():
+        if saved_id in id_to_index:
+            resumed_indices.append(id_to_index[saved_id])
+            resumed_labels.append(label)
+        else:
+            print(
+                f"Warning: Cached ID {saved_id} not found in the current dataset. Skipping."
+            )
+
+    active_learner.initialize_data(np.array(resumed_indices), np.array(resumed_labels))
 
 else:
-    # Filter for articles that contain at least four of the above keywords.
-    # This is a somewhat arbitrary number that was experimentally determined:
-    # filtering on articles that contained at least one returned too many results to be useful,
-    # while filtering on articles that contained all of them returned 0 results.
+    # Filter for items that contain at least four of the above keywords.
+    # This is a number that was experimentally determined:
+    # too high and you get very few hits; too low and you get pointless seed items.
     # It doesn't really matter that much anyway, since this is only to get some useful seed labels.
     # The real classification is done later, after labeling.
-
+    # The items should also be relatively long, to ensure they contain enough information to label.
+    # This is because the dataset contains a lot of very short comments that are not useful for training,
+    # which confuses the model because it will over-weight certain words that appear in those short comments but are not actually relevant to the task.
     print(
         "No existing progress found. Starting fresh initialization with keyword filtering..."
     )
@@ -277,18 +264,16 @@ else:
             end="\r",
         )
 
-        matches = KEYWORDS_PATTERN.findall(text)
-        match_count = len(matches)
+        unique_matches = set(m.lower() for m in KEYWORDS_PATTERN.findall(text))
+        unique_match_count = len(unique_matches)
 
-        if match_count >= 1:
+        if unique_match_count >= 4 and len(text) >= 150:
             candidate_indices.append(idx)
 
     print(
-        f"Found {len(candidate_indices)} potential hits out of {len(raw_texts)} total texts using keyword search."
+        f"\nFound {len(candidate_indices)} potential hits out of {len(raw_texts)} total texts using keyword search."
     )
 
-    # Randomly select 25 samples from this concentrated list, falling back to random if not enough hits.
-    # Here, too, the number 25 was experimentally decided; using only 5 seed articles turned out not to provide much of a boost.
     if len(candidate_indices) >= 25:
         initial_indices = np.random.choice(candidate_indices, size=25, replace=False)
     else:
@@ -298,15 +283,19 @@ else:
     seed_labels = []
 
     for count, idx in enumerate(initial_indices):
-        print(f"\nSeed Item {count+1}/25")
+        print(f"\nSeed Item {count+1}/25 (ID: {item_ids[idx]})")
         print(preview_text(raw_texts[idx]))
         print("")
 
-        label = input(
-            "Label (0 for Not Relevant, 1 for Relevant (Dutch culinary culture)): "
-        )
-        if label not in ["0", "1"]:
-            raise ValueError("Invalid label! Please enter 0 or 1.")
+        while True:
+            label = input(
+                "Label (0 for Not Relevant, 1 for Relevant (Dutch culinary culture)): "
+            ).strip()
+
+            if label in ["0", "1"]:
+                break
+
+            print("Enter 0 or 1")
         seed_labels.append(int(label))
 
         print("\n\n\n\n\n")
@@ -315,7 +304,8 @@ else:
     active_learner.initialize_data(initial_indices, np.array(seed_labels))
 
     for idx, lbl in zip(initial_indices, seed_labels):
-        annotations_dict[str(idx)] = int(lbl)
+        item_id = item_ids[idx]
+        annotations_dict[item_id] = int(lbl)
 
     with open(REDDIT_ANNOTATIONS_FILE, "w") as f:
         json.dump(annotations_dict, f)
@@ -336,25 +326,27 @@ current_labels = []
 quit_requested = False
 
 for count, idx in enumerate(queried_indices):
-    # Displaying how many of the above-defined keywords are present in this article makes labeling easier.
-    # For instance, trying to manually scan a 2000-word article about an athlete to find out if it contains an utterance about Dutch food is quite difficult.
-    # But if we can see that it contains 0 out of the 16 keywords, it's immediately obvious that it's almost certainly not relevant, and we can label it as such without having to read the entire thing.
     matches = set(m.lower() for m in KEYWORDS_PATTERN.findall(raw_texts[idx]))
     keywords_count = len(matches)
+
     print(
-        f"\nItem {count+1}/{samples_per_query}. {keywords_count}/{len(KEYWORDS)} keywords."
+        f"\nItem {count+1}/{samples_per_query}. {keywords_count}/{len(KEYWORDS)} keywords. (ID: {item_ids[idx]})"
     )
+
     print(preview_text(raw_texts[idx]))
     print("")
 
-    label = input("Label (0=No, 1=Yes, 'q'=Save and Quit): ")
+    while True:
+        label = input("Label (0=No, 1=Yes, 'q'=Save and Quit): ").strip()
+
+        if label in ["0", "1", "q"]:
+            break
+
+        print("Enter 0 or 1")
 
     if label.lower() == "q":
         quit_requested = True
         break
-
-    if label not in ["0", "1"]:
-        raise ValueError("Invalid label! Please enter 0, 1, or q.")
 
     current_labels.append(int(label))
 
@@ -366,11 +358,11 @@ for count, idx in enumerate(queried_indices):
 # ===========================================
 
 if quit_requested:
-    # We quit mid-batch. Save the partial labels to JSON, but DO NOT call active_learner.update()
-    # because passing fewer labels than queried will cause a small-text shape mismatch error. We'll just pick them up next time.
     processed_indices = queried_indices[: len(current_labels)]
+
     for idx, lbl in zip(processed_indices, current_labels):
-        annotations_dict[str(idx)] = int(lbl)
+        item_id = item_ids[idx]
+        annotations_dict[item_id] = int(lbl)
 
     with open(REDDIT_ANNOTATIONS_FILE, "w") as f:
         json.dump(annotations_dict, f)
@@ -378,21 +370,22 @@ if quit_requested:
     print_header("Early exit requested. Partial batch saved to JSON. Wrapping up...")
 
 else:
-    # Full batch completed. Update the model and save to JSON.
     active_learner.update(np.array(current_labels))
 
     for idx, lbl in zip(queried_indices, current_labels):
-        annotations_dict[str(idx)] = int(lbl)
+        item_id = item_ids[idx]
+        annotations_dict[item_id] = int(lbl)
 
     with open(REDDIT_ANNOTATIONS_FILE, "w") as f:
         json.dump(annotations_dict, f)
 
 print(f"Total labeled: {len(annotations_dict)}")
 
-print("\nSaving the model...")
+print("\nSaving the model and vectorizer...")
 
 final_model = active_learner.classifier.model  # type: ignore
 
 joblib.dump(final_model, REDDIT_MODEL_FILE)
+joblib.dump(vectorizer, REDDIT_VECTORIZER_FILE)
 
 print("Saved successfully!")
