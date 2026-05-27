@@ -9,17 +9,68 @@ import pandas as pd
 from lightgbm import LGBMClassifier
 from pathlib import Path
 from sklearn.feature_extraction.text import TfidfVectorizer
+import joblib
+from constants import REDDIT_ANNOTATIONS_FILE, REDDIT_CACHE_FILE
 
 warnings.filterwarnings(
     "ignore", message="X does not have valid feature names*"
 )  # Ignore LBGM warnings about feature names for clean output
 
 script_dir = Path(__file__).parent
+results_dir = script_dir / "artifacts" / "results" / "llm"
+gold_annotations_file = script_dir / "annotations" / "manual_eval_labels.json"
 
 
-def evaluate_llm_labeled():
-    results_dir = script_dir / "artifacts" / "results" / "llm"
+def evaluate_human_labeled_ml_models():
+    print("=====> Evaluating ML models trained on human-labeled data\n")
+    print("Loading text mapping from active learning cache...")
+    cached_data = joblib.load(REDDIT_CACHE_FILE)
 
+    # Create a clean dictionary mapping actual HF IDs directly to their raw texts
+    id_to_text = dict(zip(cached_data["item_ids"], cached_data["raw_texts"]))
+
+    al_labels_series = pd.read_json(
+        REDDIT_ANNOTATIONS_FILE, orient="index", typ="series"
+    )
+
+    active_learning_labeled_df = al_labels_series.reset_index().rename(
+        columns={"index": "id", 0: "label"}
+    )
+
+    active_learning_labeled_df["text"] = active_learning_labeled_df["id"].map(
+        id_to_text
+    )
+
+    gold_df = (
+        pd.read_json(gold_annotations_file, orient="index", typ="series")
+        .reset_index()
+        .rename(columns={"index": "id", 0: "gold_label"})
+    )
+
+    gold_df["text"] = gold_df["id"].map(id_to_text)
+
+    df_train = active_learning_labeled_df[
+        ~active_learning_labeled_df["id"].isin(gold_df["id"])
+    ].copy()
+
+    df_train["final_label"] = df_train["label"].astype(int)
+
+    df_train = df_train.dropna(subset=["text"])
+    df_test = gold_df.dropna(subset=["text"])
+
+    train_texts: list[str] = df_train["text"].tolist()
+    test_texts: list[str] = df_test["text"].tolist()
+
+    y_train: np.ndarray = df_train["final_label"].values  # type: ignore
+    y_test: np.ndarray = df_test["gold_label"].values  # type: ignore
+
+    evaluate_tfidf(train_texts, test_texts, y_train, y_test)
+    evaluate_sentencebert(train_texts, test_texts, y_train, y_test)
+    evaluate_robbert(train_texts, test_texts, y_train, y_test)
+
+
+def evaluate_llm_labeled_ml_models():
+    print("=====> Evaluating ML models trained on LLM-labeled data\n")
     qwen25_file_name = "results-nl-Qwen-Qwen2.5-7B-Instruct-20260514-1537.ndjson"
     mistral35_file_name = (
         "results-nl-mistralai-Mistral-Medium-3.5-128B-20260514-1653.ndjson"
@@ -35,7 +86,6 @@ def evaluate_llm_labeled():
         df_full_llm["label_Qwen"] == df_full_llm["label_Mistral"]
     ].copy()
 
-    gold_annotations_file = script_dir / "annotations" / "manual_eval_labels.json"
     gold_df = (
         pd.read_json(gold_annotations_file, orient="index", typ="series")
         .reset_index()
@@ -52,15 +102,15 @@ def evaluate_llm_labeled():
         how="inner",
     )
 
-    train_texts_llm: list[str] = df_train_llm["text"].tolist()
-    test_texts_llm: list[str] = df_test_llm["text"].tolist()
+    train_texts: list[str] = df_train_llm["text"].tolist()
+    test_texts: list[str] = df_test_llm["text"].tolist()
 
-    y_train_llm: np.ndarray = df_train_llm["final_label"].values  # type: ignore
-    y_test_llm: np.ndarray = df_test_llm["gold_label"].values  # type: ignore
+    y_train: np.ndarray = df_train_llm["final_label"].values  # type: ignore
+    y_test: np.ndarray = df_test_llm["gold_label"].values  # type: ignore
 
-    evaluate_tfidf(train_texts_llm, test_texts_llm, y_train_llm, y_test_llm)
-    evaluate_sentencebert(train_texts_llm, test_texts_llm, y_train_llm, y_test_llm)
-    evaluate_robbert(train_texts_llm, test_texts_llm, y_train_llm, y_test_llm)
+    evaluate_tfidf(train_texts, test_texts, y_train, y_test)
+    evaluate_sentencebert(train_texts, test_texts, y_train, y_test)
+    evaluate_robbert(train_texts, test_texts, y_train, y_test)
 
 
 def evaluate_tfidf(
@@ -315,4 +365,5 @@ def evaluate_robbert(
 
 
 if __name__ == "__main__":
-    evaluate_llm_labeled()
+    evaluate_llm_labeled_ml_models()
+    evaluate_human_labeled_ml_models()

@@ -314,7 +314,7 @@ else:
 # ==========================================
 # 4. The Active Learning loop
 # ==========================================
-samples_per_query = 50
+samples_per_query = 25
 
 print_header(f"Starting labeling session (Batch size: {samples_per_query})...\n")
 
