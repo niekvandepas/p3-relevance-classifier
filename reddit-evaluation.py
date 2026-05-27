@@ -1,6 +1,6 @@
-import json
+import warnings
 import numpy as np
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import classification_report, confusion_matrix, cohen_kappa_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import SVC
@@ -8,9 +8,11 @@ from sklearn.linear_model import LogisticRegression
 import pandas as pd
 from lightgbm import LGBMClassifier
 from pathlib import Path
-
-
 from sklearn.feature_extraction.text import TfidfVectorizer
+
+warnings.filterwarnings(
+    "ignore", message="X does not have valid feature names*"
+)  # Ignore LBGM warnings about feature names for clean output
 
 script_dir = Path(__file__).parent
 
@@ -50,18 +52,63 @@ def evaluate_llm_labeled():
         how="inner",
     )
 
-    train_texts_llm = df_train_llm["text"].tolist()
-    test_texts_llm = df_test_llm["text"].tolist()
+    train_texts_llm: list[str] = df_train_llm["text"].tolist()
+    test_texts_llm: list[str] = df_test_llm["text"].tolist()
 
-    y_train_llm = df_train_llm["final_label"].values
-    y_test_llm = df_test_llm["gold_label"].values
+    y_train_llm: np.ndarray = df_train_llm["final_label"].values  # type: ignore
+    y_test_llm: np.ndarray = df_test_llm["gold_label"].values  # type: ignore
 
     evaluate_tfidf(train_texts_llm, test_texts_llm, y_train_llm, y_test_llm)
     evaluate_sentencebert(train_texts_llm, test_texts_llm, y_train_llm, y_test_llm)
     evaluate_robbert(train_texts_llm, test_texts_llm, y_train_llm, y_test_llm)
 
 
-def evaluate_tfidf(train_texts, test_texts, y_train, y_test):
+# def evaluate_researcher_labeled():
+#     df = pd.read_json(REDDIT_ANNOTATIONS_FILE)
+
+#     mistral_df = pd.read_json(results_dir / mistral35_file_name, lines=True)
+
+#     df_full_llm = pd.merge(
+#         qwen_df, mistral_df[["label", "id"]], on="id", suffixes=("_Qwen", "_Mistral")
+#     )
+#     df_unanimous_llm = df_full_llm[
+#         df_full_llm["label_Qwen"] == df_full_llm["label_Mistral"]
+#     ].copy()
+
+#     gold_annotations_file = script_dir / "annotations" / "manual_eval_labels.json"
+#     gold_df = (
+#         pd.read_json(gold_annotations_file, orient="index", typ="series")
+#         .reset_index()
+#         .rename(columns={"index": "id"})
+#     )
+
+#     df_train_llm = df_unanimous_llm[~df_unanimous_llm["id"].isin(gold_df["id"])].copy()
+#     df_train_llm["final_label"] = df_train_llm["label_Qwen"].astype(int)
+
+#     df_test_llm = pd.merge(
+#         gold_df.rename(columns={0: "gold_label"}),
+#         df_full_llm[["id", "text"]],
+#         on="id",
+#         how="inner",
+#     )
+
+#     train_texts_llm: list[str] = df_train_llm["text"].tolist()
+#     test_texts_llm: list[str] = df_test_llm["text"].tolist()
+
+#     y_train_llm: np.ndarray = df_train_llm["final_label"].values  # type: ignore
+#     y_test_llm: np.ndarray = df_test_llm["gold_label"].values  # type: ignore
+
+#     evaluate_tfidf(train_texts_llm, test_texts_llm, y_train_llm, y_test_llm)
+#     evaluate_sentencebert(train_texts_llm, test_texts_llm, y_train_llm, y_test_llm)
+#     evaluate_robbert(train_texts_llm, test_texts_llm, y_train_llm, y_test_llm)
+
+
+def evaluate_tfidf(
+    train_texts: list[str],
+    test_texts: list[str],
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+):
     print("Encoding TF-IDF features...")
     tfidf_vectorizer = TfidfVectorizer(ngram_range=(1, 2), min_df=2, sublinear_tf=True)
     x_train = tfidf_vectorizer.fit_transform(train_texts)
@@ -107,8 +154,8 @@ def evaluate_tfidf(train_texts, test_texts, y_train, y_test):
         y_pred = classifier.predict(x_test)
 
         report = classification_report(y_test, y_pred, output_dict=True)
-
         matrix = confusion_matrix(y_test, y_pred)
+        kappa = cohen_kappa_score(y_test, y_pred)
 
         confusion_matrices[model_name] = matrix
         results.append(
@@ -117,6 +164,7 @@ def evaluate_tfidf(train_texts, test_texts, y_train, y_test):
                 "CV F1 Score": round(classifier.best_score_, 4),
                 "Test F1 (Relevant)": round(report["1"]["f1-score"], 4),  # type: ignore
                 "Test F1 (Not Relevant)": round(report["0"]["f1-score"], 4),  # type: ignore
+                "Cohen's Kappa": round(kappa, 4),
                 "Best Params": str(classifier.best_params_),
             }
         )
@@ -136,10 +184,12 @@ def evaluate_tfidf(train_texts, test_texts, y_train, y_test):
     print(results_df.to_string(index=False))
 
 
-# ============================================== Sentence-Bert ==============================================
-
-
-def evaluate_sentencebert(train_texts, test_texts, y_train, y_test):
+def evaluate_sentencebert(
+    train_texts: list[str],
+    test_texts: list[str],
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+):
     print("\n=======> Running sentence-bert model")
 
     from sentence_transformers import SentenceTransformer
@@ -188,8 +238,8 @@ def evaluate_sentencebert(train_texts, test_texts, y_train, y_test):
         y_pred = classifier.predict(x_test_llm)
 
         report = classification_report(y_test, y_pred, output_dict=True)
-
         matrix = confusion_matrix(y_test, y_pred)
+        kappa = cohen_kappa_score(y_test, y_pred)
 
         sentence_bert_confusion_matrices[model_name] = matrix
         sentence_bert_results.append(
@@ -198,6 +248,7 @@ def evaluate_sentencebert(train_texts, test_texts, y_train, y_test):
                 "CV F1 Score": round(classifier.best_score_, 4),
                 "Test F1 (Relevant)": round(report["1"]["f1-score"], 4),  # type: ignore
                 "Test F1 (Not Relevant)": round(report["0"]["f1-score"], 4),  # type: ignore
+                "Cohen's Kappa": round(kappa, 4),
                 "Best Params": str(classifier.best_params_),
             }
         )
@@ -217,10 +268,12 @@ def evaluate_sentencebert(train_texts, test_texts, y_train, y_test):
     print(results_df.to_string(index=False))
 
 
-# ============================================== RoBBERT ==============================================
-
-
-def evaluate_robbert(train_texts, test_texts, y_train, y_test):
+def evaluate_robbert(
+    train_texts: list[str],
+    test_texts: list[str],
+    y_train: np.ndarray,
+    y_test: np.ndarray,
+):
     print("\n=======> Running RoBERTa model")
 
     from sentence_transformers import SentenceTransformer
@@ -271,8 +324,8 @@ def evaluate_robbert(train_texts, test_texts, y_train, y_test):
         y_pred = classifier.predict(x_test_llm)
 
         report = classification_report(y_test, y_pred, output_dict=True)
-
         matrix = confusion_matrix(y_test, y_pred)
+        kappa = cohen_kappa_score(y_test, y_pred)
 
         robbert_confusion_matrices[model_name] = matrix
         robbert_results.append(
@@ -281,6 +334,7 @@ def evaluate_robbert(train_texts, test_texts, y_train, y_test):
                 "CV F1 Score": round(classifier.best_score_, 4),
                 "Test F1 (Relevant)": round(report["1"]["f1-score"], 4),  # type: ignore
                 "Test F1 (Not Relevant)": round(report["0"]["f1-score"], 4),  # type: ignore
+                "Cohen's Kappa": round(kappa, 4),
                 "Best Params": str(classifier.best_params_),
             }
         )
@@ -302,3 +356,4 @@ def evaluate_robbert(train_texts, test_texts, y_train, y_test):
 
 if __name__ == "__main__":
     evaluate_llm_labeled()
+    # evaluate_researcher_labeled()
