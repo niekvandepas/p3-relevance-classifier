@@ -48,7 +48,6 @@ if Path(REDDIT_LLM_ANNOTATIONS_FILE).exists():
     with open(REDDIT_LLM_ANNOTATIONS_FILE, "r") as f:
         annotations_dict = json.load(f)
 
-# Removed current_labels list entirely
 quit_requested = False
 
 for reddit_item in reddit_items:

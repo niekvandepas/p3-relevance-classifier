@@ -31,7 +31,7 @@ from constants import (
     REDDIT_LANGUAGE,
     REDDIT_MODEL_FILE,
 )
-
+from util import preview_text, print_divider, print_header
 
 TEXT_PREVIEW_LENGTH = 2000
 
@@ -127,7 +127,7 @@ if os.path.exists(REDDIT_CACHE_FILE):
     print_header("Loading cached texts and embeddings from disk...")
     cached_data = joblib.load(
         REDDIT_CACHE_FILE,
-        mmap_mode="c", # Read embeddings from disk rather than dumping 30GB into RAM.
+        mmap_mode="c",  # Read embeddings from disk rather than dumping 30GB into RAM.
     )
     raw_texts: list[str] = cached_data["raw_texts"]
     pool_labels = cached_data["pool_labels"]
@@ -279,7 +279,6 @@ else:
 
         matches = KEYWORDS_PATTERN.findall(text)
         match_count = len(matches)
-
 
         if match_count >= 1:
             candidate_indices.append(idx)

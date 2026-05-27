@@ -18,6 +18,15 @@ from tqdm import tqdm
 
 from constants import REDDIT_LANGUAGE
 
+load_dotenv()
+
+HF_REPO_ID = os.environ.get("HF_REPO_ID")
+
+if not HF_REPO_ID:
+    raise ValueError(
+        "HF_REPO_ID environment variable not set. Please set it in your .env file."
+    )
+
 
 def import_data(data_file: Path, limit: int | None = None) -> list[RedditItem]:
     results = []
@@ -42,7 +51,7 @@ def get_data_path(file_type: str, language: str) -> Path:
 
     # This will download the file if missing, or return the path if it exists
     cached_path = hf_hub_download(
-        repo_id="niekvdpas/reddit-languages-data",
+        repo_id=HF_REPO_ID,
         filename=filename,
         repo_type="dataset",
     )
@@ -137,7 +146,6 @@ Respond STRICTLY with a single digit: 1 or 0. Do not explain your reasoning."""
 
 def main():
     print("In main() function")
-    load_dotenv()
 
     if not os.environ.get("HF_TOKEN"):
         raise ValueError(

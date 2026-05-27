@@ -1,0 +1,278 @@
+# 200 items
+
+=====> Confusion Matrices
+
+Naive Bayes:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  28             4
+Actual 1 (Relevant)    0              18
+
+SVM (Linear):
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  28             4
+Actual 1 (Relevant)    4              14
+
+Logistic Regression:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  29             3
+Actual 1 (Relevant)    5              13
+
+=====> Hyperparameter Tuning Results
+              Model  CV F1 Score  Test F1 (Relevant)  Test F1 (Not Relevant)                  Best Params
+Logistic Regression       0.8054              0.7647                  0.8788                    {'C': 10}
+       SVM (Linear)       0.7970              0.7778                  0.8750 {'C': 1, 'kernel': 'linear'}
+        Naive Bayes       0.6884              0.9000                  0.9333               {'alpha': 0.1}
+
+
+# 250 items
+
+=====> Confusion Matrices
+
+Naive Bayes:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  30             7
+Actual 1 (Relevant)    3              23
+
+SVM (Linear):
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  32             5
+Actual 1 (Relevant)    6              20
+
+Logistic Regression:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  32             5
+Actual 1 (Relevant)    6              20
+
+=====> Hyperparameter Tuning Results
+              Model  CV F1 Score  Test F1 (Relevant)  Test F1 (Not Relevant)                  Best Params
+        Naive Bayes        0.802              0.8214                  0.8571               {'alpha': 0.5}
+Logistic Regression        0.774              0.7843                  0.8533                     {'C': 1}
+       SVM (Linear)        0.758              0.7843                  0.8533 {'C': 1, 'kernel': 'linear'}
+
+# 300 items
+
+Total labeled items: 300
+Training set size: 225
+Testing set size: 75
+
+=====> Confusion Matrices (TFIDF)
+
+Naive Bayes:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  38             8
+Actual 1 (Relevant)    10             19
+
+SVM (Linear):
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  40             6
+Actual 1 (Relevant)    15             14
+
+Logistic Regression:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  41             5
+Actual 1 (Relevant)    14             15
+
+=====> Hyperparameter Tuning Results (TFIDF)
+              Model  CV F1 Score  Test F1 (Relevant)  Test F1 (Not Relevant)                   Best Params
+Logistic Regression       0.7522              0.6122                  0.8119                      {'C': 1}
+       SVM (Linear)       0.7396              0.5714                  0.7921 {'C': 10, 'kernel': 'linear'}
+        Naive Bayes       0.6850              0.6786                  0.8085                {'alpha': 0.5}
+
+=====> Confusion Matrices (Sentence-Bert)
+
+SVM (Linear):
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  42             4
+Actual 1 (Relevant)    4              25
+
+Logistic Regression:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  41             5
+Actual 1 (Relevant)    4              25
+
+=====> Hyperparameter Tuning Results (Sentence-Bert)
+              Model  CV F1 Score  Test F1 (Relevant)  Test F1 (Not Relevant)                    Best Params
+       SVM (Linear)       0.8138              0.8621                  0.9130 {'C': 0.1, 'kernel': 'linear'}
+Logistic Regression       0.8131              0.8475                  0.9011                     {'C': 0.1}
+
+=====> Confusion Matrices (Robbert)
+
+SVM (Linear):
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  38             8
+Actual 1 (Relevant)    4              25
+
+Logistic Regression:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  39             7
+Actual 1 (Relevant)    4              25
+
+=====> Hyperparameter Tuning Results (Robbert)
+              Model  CV F1 Score  Test F1 (Relevant)  Test F1 (Not Relevant)                    Best Params
+Logistic Regression       0.8388              0.8197                  0.8764                     {'C': 0.1}
+       SVM (Linear)       0.8120              0.8065                  0.8636 {'C': 0.1, 'kernel': 'linear'}
+
+# 350 items
+
+Total labeled items: 350
+Training set size: 262
+Testing set size: 88
+
+=====> Confusion Matrices (TFIDF)
+
+Naive Bayes:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  35             16
+Actual 1 (Relevant)    5              32
+
+SVM (Linear):
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  44             7
+Actual 1 (Relevant)    8              29
+
+Logistic Regression:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  45             6
+Actual 1 (Relevant)    12             25
+
+=====> Hyperparameter Tuning Results (TFIDF)
+              Model  CV F1 Score  Test F1 (Relevant)  Test F1 (Not Relevant)                   Best Params
+       SVM (Linear)       0.6887              0.7945                  0.8544 {'C': 10, 'kernel': 'linear'}
+Logistic Regression       0.6866              0.7353                  0.8333                      {'C': 1}
+        Naive Bayes       0.6800              0.7529                  0.7692                {'alpha': 0.5}
+
+
+
+
+
+
+=====> Confusion Matrices (Sentence-Bert)
+
+SVM (Linear):
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  44             7
+Actual 1 (Relevant)    9              28
+
+Logistic Regression:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  42             9
+Actual 1 (Relevant)    8              29
+
+LightGBM:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  45             6
+Actual 1 (Relevant)    8              29
+
+=====> Hyperparameter Tuning Results (Sentence-Bert)
+              Model  CV F1 Score  Test F1 (Relevant)  Test F1 (Not Relevant)                                                    Best Params
+Logistic Regression       0.8362              0.7733                  0.8317                                                       {'C': 1}
+       SVM (Linear)       0.8274              0.7778                  0.8462                                 {'C': 0.1, 'kernel': 'linear'}
+           LightGBM       0.8053              0.8056                  0.8654 {'learning_rate': 0.05, 'n_estimators': 200, 'num_leaves': 31}
+
+
+
+
+
+
+
+
+
+=====> Confusion Matrices (Robbert)
+
+SVM (Linear):
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  41             10
+Actual 1 (Relevant)    4              33
+
+Logistic Regression:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  42             9
+Actual 1 (Relevant)    5              32
+
+LightGBM:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  45             6
+Actual 1 (Relevant)    5              32
+
+=====> Hyperparameter Tuning Results (Robbert)
+              Model  CV F1 Score  Test F1 (Relevant)  Test F1 (Not Relevant)                                                    Best Params
+Logistic Regression       0.8663              0.8205                  0.8571                                                       {'C': 1}
+       SVM (Linear)       0.8387              0.8250                  0.8542                                 {'C': 0.1, 'kernel': 'linear'}
+           LightGBM       0.8235              0.8533                  0.8911 {'learning_rate': 0.05, 'n_estimators': 200, 'num_leaves': 31}
+
+
+
+# 400 items
+
+Total labeled items: 400
+Training set size: 300
+Testing set size: 100
+
+=====> Confusion Matrices (TFIDF)
+
+Naive Bayes:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  43             17
+Actual 1 (Relevant)    16             24
+
+SVM (Linear):
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  51             9
+Actual 1 (Relevant)    12             28
+
+Logistic Regression:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  52             8
+Actual 1 (Relevant)    15             25
+
+=====> Hyperparameter Tuning Results (TFIDF)
+              Model  CV F1 Score  Test F1 (Relevant)  Test F1 (Not Relevant)                   Best Params
+       SVM (Linear)       0.6867              0.7273                  0.8293 {'C': 10, 'kernel': 'linear'}
+Logistic Regression       0.6849              0.6849                  0.8189                      {'C': 1}
+        Naive Bayes       0.5874              0.5926                  0.7227                {'alpha': 0.5}
+
+=====> Confusion Matrices (Sentence-Bert)
+
+SVM (Linear):
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  52             8
+Actual 1 (Relevant)    10             30
+
+Logistic Regression:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  50             10
+Actual 1 (Relevant)    10             30
+
+LightGBM:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  53             7
+Actual 1 (Relevant)    9              31
+
+=====> Hyperparameter Tuning Results (Sentence-Bert)
+              Model  CV F1 Score  Test F1 (Relevant)  Test F1 (Not Relevant)                                                   Best Params
+Logistic Regression       0.8191              0.7500                  0.8333                                                      {'C': 1}
+       SVM (Linear)       0.8128              0.7692                  0.8525                                {'C': 0.1, 'kernel': 'linear'}
+           LightGBM       0.8077              0.7949                  0.8689 {'learning_rate': 0.1, 'n_estimators': 200, 'num_leaves': 31}
+
+=====> Confusion Matrices (Robbert)
+
+SVM (Linear):
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  51             9
+Actual 1 (Relevant)    7              33
+
+Logistic Regression:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  52             8
+Actual 1 (Relevant)    7              33
+
+LightGBM:
+                       Predicted 0    Predicted 1
+Actual 0 (Irrelevant)  53             7
+Actual 1 (Relevant)    10             30
+
+=====> Hyperparameter Tuning Results (Robbert)
+              Model  CV F1 Score  Test F1 (Relevant)  Test F1 (Not Relevant)                                                   Best Params
+Logistic Regression       0.8559              0.8148                  0.8739                                                     {'C': 10}
+           LightGBM       0.8552              0.7792                  0.8618 {'learning_rate': 0.1, 'n_estimators': 200, 'num_leaves': 31}
+       SVM (Linear)       0.8454              0.8049                  0.8644                                {'C': 0.1, 'kernel': 'linear'}
