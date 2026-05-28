@@ -166,6 +166,11 @@ else:
 
                 # Only consider non-empty texts
                 if text.strip():
+                    # Check that the text has meat on its bones (e.g., at least 25-30 words).
+                    # This completely excludes 1-sentence comments and title-only submissions.
+                    if len(text.split()) < 100:
+                        continue
+
                     item_ids.append(item["id"])
                     raw_texts.append(text)
                     pool_labels.append(LABEL_UNLABELED)
