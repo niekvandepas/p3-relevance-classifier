@@ -19,6 +19,7 @@ RUN apt-get update && \
 WORKDIR /app
 COPY ./reddit_llm_classifier.py /app
 COPY ./constants.py .
+COPY ./project_types.py .
 
 # Default values for .env
 RUN printf "LLM_NAME=BramVanroy/GEITje-7B-ultra\nLLM_REDDIT_DATA_SOURCE=huggingface\nNUM_GPUS=1\n" > .env
