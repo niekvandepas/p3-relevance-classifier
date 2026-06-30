@@ -27,6 +27,19 @@ if not HF_REPO_ID:
         "HF_REPO_ID environment variable not set. Please set it in your .env file."
     )
 
+LLM_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "reasoning": {
+            "type": "string",
+            "description": "Short explanation of the choice, max 15 words.",
+        },
+        "label": {"type": "integer", "enum": [0, 1]},
+    },
+    "required": ["reasoning", "label"],
+    "additionalProperties": False,
+}
+
 
 def import_data(data_file: Path, limit: int | None = None) -> list[RedditItem]:
     results = []
@@ -61,87 +74,82 @@ def get_data_path(file_type: str, language: str) -> Path:
 
 def build_prompt(reddit_text: str, language: str) -> list:
     if language == "nl":
-        system_prompt = """Je bent een Nederlandse antropoloog die nationale identiteit en voedselcultuur bestudeert.
+        system_prompt = """Je bent een uiterst strikte Nederlandse antropoloog die de letterlijke, culinaire nationale identiteit bestudeert.
 
-Je taak is om te bepalen of een tekst letterlijk over Nederlandse voedselcultuur of eetpraktijken gaat.
+Je enige taak is om te bepalen of een tekst EXPLICIET over Nederlandse voedselcultuur, traditionele gerechten of eetgewoonten gaat. Je bent zeer streng: bij twijfel of indirecte links is het antwoord altijd 0.
 
-CRITERIA:
+CRITERIA VOOR RELEVANT (1):
+- Specifieke Nederlandse gerechten of snacks (bijv. stamppot, bitterballen, frikandelbroodje, hagelslag).
+- Kookgewoonten, receptdiscussies of eetcultuur in Nederlandse huishoudens.
+- Discussies over wat "typisch Nederlands" eten is (bijv. patat vs. friet).
 
-- RELEVANT (1): Vermeldingen van traditionele gerechten (stamppot, pannenkoeken), eetrituelen, voedselgebruiken of de sociale rol van eten in Nederland.
+CRITERIA VOOR IRRELEVANT (0):
+- Landbouw, voedselexport of boerderijen (bijv. "uienexport", "landbouwexport").
+- Supermarktacties, logistiek of algemene voedselprijzen (bijv. "AH pannenzegels", "boodschappen doen").
+- Horeca-industrie in het algemeen (bijv. "terrassen open", "kroegen dicht").
+- Voedselidiomen of metaforen (bijv. "andere koek").
+- Elke tekst die eten slechts terloops noemt zonder culturele context.
 
-- IRRELEVANT (0): Voedselidiomen (bijv. "andere koek", "boter op het hoofd"), metaforen, boodschappenlijstjes of niet-gerelateerde onderwerpen.
-
-Antwoord STRIKT met één cijfer: 1 of 0. Geen uitleg."""
+Antwoord uitsluitend in JSON-formaat. Geef eerst een korte 'reasoning' (maximaal 15 woorden) en daarna het 'label' (1 of 0)."""
 
         return [
-            {
-                "role": "system",
-                "content": system_prompt,
-            },
-            {
-                "role": "user",
-                "content": "De Nederlandse keuken (veel aardappelen, groenten etc) is niet bijzonder, maar wel beter dan de Amerikaanse. De cuisines van deze twee landen staan ergens onderaan de lijst.",
-            },
-            {"role": "assistant", "content": "1"},
-            {
-                "role": "user",
-                "content": "De nieuwe wetgeving is echt andere koek, de overheid heeft boter op haar hoofd.",
-            },
-            {"role": "assistant", "content": "0"},
-            {
-                "role": "user",
-                "content": "Ik heb net vier kaassoufflés bij de Febo gehaald, was 10 euro.",
-            },
-            {"role": "assistant", "content": "0"},
-            {
-                "role": "user",
-                "content": "Ja, stamppot, maar of dat nou echt lekker te noemen is...",
-            },
-            {"role": "assistant", "content": "1"},
+            {"role": "system", "content": system_prompt},
+            # Edge Case: Agriculture (0)
+            {"role": "user", "content": "Nederlandse landbouwexport nooit eerder zo hoog"},
+            {"role": "assistant", "content": '{"reasoning": "Dit gaat over macro-economische export, niet over eetcultuur.", "label": 0}'},
+            # Edge Case: Supermarket logic (0)
+            {"role": "user", "content": "Iemand nog pannenzegels van de AH over om te delen?"},
+            {"role": "assistant", "content": '{"reasoning": "Dit is een supermarkt spaaractie, geen maaltijd of culinair gebruik.", "label": 0}'},
+            # Clear Hit: Culinary Culture (1)
+            {"role": "user", "content": "Broodje hagelslag met of zonder boter?"},
+            {"role": "assistant", "content": '{"reasoning": "Discussie over de bereiding van een typisch Nederlands ontbijt.", "label": 1}'},
+            # Edge Case: General hospitality/business (0)
+            {"role": "user", "content": "Van terrasdirigent tot verwijderde lantaarnpalen: de horeca is er klaar voor"},
+            {"role": "assistant", "content": '{"reasoning": "Dit betreft horeca-logistiek en bedrijfsvoering, geen voedselcultuur.", "label": 0}'},
+            # Clear Hit: Recipes/Cooking (1)
+            {"role": "user", "content": "Recept voor bitterballen/kroketten? Ik ben opzoek naar iedereens favoriete recept..."},
+            {"role": "assistant", "content": '{"reasoning": "Vraag naar recepten voor traditionele Nederlandse snacks.", "label": 1}'},
+            # The actual target
             {"role": "user", "content": f"{reddit_text}"},
         ]
 
     elif language == "en":
-        system_prompt = """You are a Dutch Anthropologist studying national identity and food culture.
-Your task is to classify whether a text discusses literal Dutch culinary culture or food practices as they relate to identity.
+        # Note: You can apply the exact same logic for English if needed.
+        # I have translated the strict criteria here.
+        system_prompt = """You are an extremely strict Dutch Anthropologist studying literal culinary national identity.
 
-CRITERIA:
-- RELEVANT (1): Mentions of traditional dishes (stamppot, pannenkoeken), food rituals, dining habits, or the social role of food in the Netherlands.
-- IRRELEVANT (0): Food-based idioms (e.g., "andere koek", "boter op het hoofd"), metaphors, transactional grocery lists, or completely unrelated topics.
+Your only task is to determine if a text EXPLICITLY discusses Dutch food culture, traditional dishes, or dining habits. You are very strict: when in doubt or if the link is indirect, the answer is always 0.
 
-Respond STRICTLY with a single digit: 1 or 0. Do not explain your reasoning."""
+CRITERIA FOR RELEVANT (1):
+- Specific Dutch dishes or snacks (e.g., stamppot, bitterballen, frikandelbroodje, hagelslag).
+- Cooking habits, recipe discussions, or food culture in Dutch households.
+- Debates on "typical Dutch" food.
+
+CRITERIA FOR IRRELEVANT (0):
+- Agriculture, food exports, or farming.
+- Supermarket logistics or general food prices.
+- The hospitality industry in general (e.g., "terraces opening").
+- Food idioms or metaphors.
+- Any text mentioning food casually without cultural context.
+
+Respond exclusively in JSON format. Provide a short 'reasoning' (maximum 15 words) first, followed by the 'label' (1 or 0)."""
 
         return [
-            {
-                "role": "system",
-                "content": system_prompt,
-            },
-            {
-                "role": "user",
-                "content": "Dutch cuisine is really nothing special in my opinion.",
-            },
-            {"role": "assistant", "content": "1"},
-            {
-                "role": "user",
-                "content": "They really had egg on their face when that happpened.",
-            },
-            {"role": "assistant", "content": "0"},
-            {
-                "role": "user",
-                "content": "I just went out to dinner and paid €70... food prices are getting out of hand.",
-            },
-            {"role": "assistant", "content": "0"},
-            {
-                "role": "user",
-                "content": "Sure, stamppot, but does anybody actually like that?",
-            },
-            {"role": "assistant", "content": "1"},
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": "Dutch agricultural exports have never been higher"},
+            {"role": "assistant", "content": '{"reasoning": "Discusses macroeconomic exports, not literal eating culture.", "label": 0}'},
+            {"role": "user", "content": "Does anyone have spare Albert Heijn pan stamps to share?"},
+            {"role": "assistant", "content": '{"reasoning": "Supermarket loyalty program, unrelated to culinary habits.", "label": 0}'},
+            {"role": "user", "content": "Broodje hagelslag with or without butter?"},
+            {"role": "assistant", "content": '{"reasoning": "Debate about preparing a traditional Dutch breakfast item.", "label": 1}'},
+            {"role": "user", "content": "From terrace managers to removed lampposts: the hospitality sector is ready"},
+            {"role": "assistant", "content": '{"reasoning": "Hospitality business logistics, not actual food culture.", "label": 0}'},
+            {"role": "user", "content": "Recipe for bitterballen/kroketten? I am looking for everyone's favorite recipe..."},
+            {"role": "assistant", "content": '{"reasoning": "Seeking a recipe for traditional Dutch snacks.", "label": 1}'},
             {"role": "user", "content": f"{reddit_text}"},
         ]
     else:
-        raise ValueError(
-            f"Unsupported language: {language}. Supported languages are 'en' and 'nl'."
-        )
+        raise ValueError(f"Unsupported language: {language}. Supported languages are 'en' and 'nl'.")
 
 
 def main():
@@ -218,11 +226,12 @@ def main():
     )
     results_file.parent.mkdir(parents=True, exist_ok=True)
 
-    structured_params = StructuredOutputsParams(choice=["0", "1"])
+    schema_str = json.dumps(LLM_JSON_SCHEMA)
+    structured_params = StructuredOutputsParams(json=schema_str)
 
-    # Configure generation parameters (temperature 0 for determinism, max_tokens 2 for strict output)
+    # Configure generation parameters (temperature 0 for determinism, max_tokens 60 to allow reasoning)
     sampling_params = SamplingParams(
-        temperature=0.0, max_tokens=2, structured_outputs=structured_params
+        temperature=0.0, max_tokens=60, structured_outputs=structured_params
     )
 
     tokenizer = AutoTokenizer.from_pretrained(LLM_NAME)
@@ -253,12 +262,23 @@ def main():
     print("Writing results to disk...")
     with open(results_file, "w", encoding="utf-8", buffering=1) as f_out:
         for item, output in zip(all_items, outputs):
-            classification = output.outputs[0].text.strip()
+            raw_response = output.outputs[0].text.strip()
+
+            # Safely parse the JSON output
+            try:
+                parsed_response = json.loads(raw_response)
+                label = parsed_response.get("label", 0)
+                reasoning = parsed_response.get("reasoning", "")
+            except json.JSONDecodeError:
+                # Fallback in case of a highly unusual parsing failure
+                label = 0
+                reasoning = "JSON parsing error"
 
             output_data = {
                 "id": item["id"],
                 "model": LLM_NAME,
-                "label": classification,
+                "label": label,
+                "reasoning": reasoning,
                 "text": item["text"],
             }
 
