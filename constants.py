@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from nltk.corpus import stopwords
 
 load_dotenv()
 
@@ -35,10 +34,3 @@ REDDIT_CACHE_FILE = Path("artifacts/cache") / REDDIT_CACHE_FILE_NAME
 
 REDDIT_ANNOTATIONS_FILE_NAME = f"reddit_annotations_progress.{REDDIT_LANGUAGE}.json"
 REDDIT_ANNOTATIONS_FILE = Path("annotations") / REDDIT_ANNOTATIONS_FILE_NAME
-
-
-REDDIT_STOP_WORDS = (
-    list(set(stopwords.words("dutch")).union({"mijn", "ik", "zijn", "was", "we"}))
-    if REDDIT_LANGUAGE == "nl"
-    else list(set(stopwords.words("english")))
-)

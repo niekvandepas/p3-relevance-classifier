@@ -5,6 +5,7 @@ import time
 import warnings
 
 import numpy as np
+from nltk.corpus import stopwords
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.naive_bayes import MultinomialNB
@@ -30,7 +31,6 @@ from constants import (
     REDDIT_CACHE_FILE,
     REDDIT_LANGUAGE,
     REDDIT_MODEL_FILE,
-    REDDIT_STOP_WORDS,
     REDDIT_VECTORIZER_FILE,
 )
 from util import preview_text, print_divider, print_header
@@ -43,6 +43,13 @@ TEXT_PREVIEW_LENGTH = 2000
 # It is also appended to the model and vectorizer filenames when saving,
 # to avoid collisions if you run the script multiple times with different languages.
 LANGUAGE = REDDIT_LANGUAGE
+
+
+REDDIT_STOP_WORDS = (
+    list(set(stopwords.words("dutch")).union({"mijn", "ik", "zijn", "was", "we"}))
+    if REDDIT_LANGUAGE == "nl"
+    else list(set(stopwords.words("english")))
+)
 
 KEYWORDS = (
     [
