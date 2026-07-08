@@ -28,5 +28,6 @@ dependencies = [
     "small-text==1.4.1",
     "threadpoolctl==3.6.0",
     "tqdm==4.67.3",
+    "vllm>=0.5.0.post1 ; sys_platform == 'linux'",
     "wcwidth==0.6.0",
 ]
