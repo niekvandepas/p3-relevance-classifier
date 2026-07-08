@@ -60,7 +60,7 @@ def get_data_path(file_type: str, language: str) -> Path:
     file_type: 'posts' or 'comments'
     language: 'en' or 'nl'
     """
-    filename = f"reddit-{language}-{file_type}-filtered_NLsekeuken-eten-culinair.ndjson"
+    filename = f"reddit-{language}-{file_type}-keyword-filtered.ndjson"
 
     # This will download the file if missing, or return the path if it exists
     cached_path = hf_hub_download(
