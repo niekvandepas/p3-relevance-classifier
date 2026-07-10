@@ -1,8 +1,8 @@
 print("Importing modules")
 from datetime import datetime
 import json
+import math
 from pathlib import Path
-from typing import cast
 from huggingface_hub import HfApi, hf_hub_download
 
 # vllm does not build on macOS, so silence import error
@@ -21,21 +21,25 @@ from constants import REDDIT_LANGUAGE
 
 load_dotenv()
 
-HF_REPO_ID = os.environ.get("HF_REPO_ID")
-HF_TOKEN = os.environ.get("HF_TOKEN")
+
+def require_env(var_name: str, help_message: str) -> str:
+    value = os.environ.get(var_name)
+    if not value:
+        raise ValueError(help_message)
+    return value
+
+
+HF_REPO_ID = require_env(
+    "HF_REPO_ID",
+    "HF_REPO_ID environment variable not set. Please set it in your .env file.",
+)
+HF_TOKEN = require_env(
+    "HF_TOKEN",
+    "HF_TOKEN environment variable not set. Please set it in your .env file with a HuggingFace API token.",
+)
 HF_RESULTS_REPO_ID = os.environ.get(
     "HF_RESULTS_REPO_ID", "niekvdpas/p3-classification-results"
 )
-
-if not HF_REPO_ID:
-    raise ValueError(
-        "HF_REPO_ID environment variable not set. Please set it in your .env file."
-    )
-
-if not HF_TOKEN:
-    raise ValueError(
-        "HF_TOKEN environment variable not set. Please set it in your .env file with a HuggingFace API token."
-    )
 
 
 def upload_results_to_huggingface(results_file: Path, llm_name: str) -> None:
@@ -97,7 +101,7 @@ def get_data_path(file_type: str, language: str) -> Path:
         repo_id=HF_REPO_ID,
         filename=filename,
         repo_type="dataset",
-    ) # type: ignore
+    )
 
     return Path(cached_path)
 
@@ -297,6 +301,27 @@ def main():
     comments = import_data(reddit_comments_data_path)
 
     all_items = posts + comments
+    ratio_raw = os.environ.get("LLM_CLASSIFICATION_RATIO")
+    if ratio_raw:
+        try:
+            ratio = float(ratio_raw)
+        except ValueError as exc:
+            raise ValueError(
+                "Invalid LLM_CLASSIFICATION_RATIO. Use a number between 0 and 1, e.g. 0.1"
+            ) from exc
+
+        if not (0 < ratio <= 1):
+            raise ValueError(
+                "Invalid LLM_CLASSIFICATION_RATIO. Use a number between 0 and 1, e.g. 0.1"
+            )
+
+        count = max(1, math.ceil(len(all_items) * ratio))
+        all_items = all_items[:count]
+        print(
+            f"Applying LLM_CLASSIFICATION_RATIO={ratio}; running on {len(all_items)} items."
+        )
+    else:
+        print(f"LLM_CLASSIFICATION_RATIO not set; running full dataset ({len(all_items)} items).")
 
     safe_model_name = LLM_NAME.replace("/", "-").replace(":", "-")
 
