@@ -2,7 +2,8 @@ print("Importing modules")
 from datetime import datetime
 import json
 from pathlib import Path
-from huggingface_hub import hf_hub_download
+from typing import cast
+from huggingface_hub import HfApi, hf_hub_download
 
 # vllm does not build on macOS, so silence import error
 from project_types import RedditItem
@@ -21,11 +22,40 @@ from constants import REDDIT_LANGUAGE
 load_dotenv()
 
 HF_REPO_ID = os.environ.get("HF_REPO_ID")
+HF_TOKEN = os.environ.get("HF_TOKEN")
+HF_RESULTS_REPO_ID = os.environ.get(
+    "HF_RESULTS_REPO_ID", "niekvdpas/p3-classification-results"
+)
 
 if not HF_REPO_ID:
     raise ValueError(
         "HF_REPO_ID environment variable not set. Please set it in your .env file."
     )
+
+if not HF_TOKEN:
+    raise ValueError(
+        "HF_TOKEN environment variable not set. Please set it in your .env file with a HuggingFace API token."
+    )
+
+
+def upload_results_to_huggingface(results_file: Path, llm_name: str) -> None:
+    api = HfApi(token=HF_TOKEN)
+    api.create_repo(repo_id=HF_RESULTS_REPO_ID, repo_type="dataset", exist_ok=True)
+
+    path_in_repo = f"llm/{results_file.name}"
+
+    api.upload_file(
+        path_or_fileobj=str(results_file),
+        path_in_repo=path_in_repo,
+        repo_id=HF_RESULTS_REPO_ID,
+        repo_type="dataset",
+        commit_message=f"Add LLM classification results for {llm_name}",
+    )
+
+    print(
+        f"Uploaded results file to Hugging Face dataset {HF_RESULTS_REPO_ID} at {path_in_repo}"
+    )
+
 
 LLM_JSON_SCHEMA = {
     "type": "object",
@@ -67,7 +97,7 @@ def get_data_path(file_type: str, language: str) -> Path:
         repo_id=HF_REPO_ID,
         filename=filename,
         repo_type="dataset",
-    )
+    ) # type: ignore
 
     return Path(cached_path)
 
@@ -95,20 +125,47 @@ Antwoord uitsluitend in JSON-formaat. Geef eerst een korte 'reasoning' (maximaal
         return [
             {"role": "system", "content": system_prompt},
             # Edge Case: Agriculture (0)
-            {"role": "user", "content": "Nederlandse landbouwexport nooit eerder zo hoog"},
-            {"role": "assistant", "content": '{"reasoning": "Dit gaat over macro-economische export, niet over eetcultuur.", "label": 0}'},
+            {
+                "role": "user",
+                "content": "Nederlandse landbouwexport nooit eerder zo hoog",
+            },
+            {
+                "role": "assistant",
+                "content": '{"reasoning": "Dit gaat over macro-economische export, niet over eetcultuur.", "label": 0}',
+            },
             # Edge Case: Supermarket logic (0)
-            {"role": "user", "content": "Iemand nog pannenzegels van de AH over om te delen?"},
-            {"role": "assistant", "content": '{"reasoning": "Dit is een supermarkt spaaractie, geen maaltijd of culinair gebruik.", "label": 0}'},
+            {
+                "role": "user",
+                "content": "Iemand nog pannenzegels van de AH over om te delen?",
+            },
+            {
+                "role": "assistant",
+                "content": '{"reasoning": "Dit is een supermarkt spaaractie, geen maaltijd of culinair gebruik.", "label": 0}',
+            },
             # Clear Hit: Culinary Culture (1)
             {"role": "user", "content": "Broodje hagelslag met of zonder boter?"},
-            {"role": "assistant", "content": '{"reasoning": "Discussie over de bereiding van een typisch Nederlands ontbijt.", "label": 1}'},
+            {
+                "role": "assistant",
+                "content": '{"reasoning": "Discussie over de bereiding van een typisch Nederlands ontbijt.", "label": 1}',
+            },
             # Edge Case: General hospitality/business (0)
-            {"role": "user", "content": "Van terrasdirigent tot verwijderde lantaarnpalen: de horeca is er klaar voor"},
-            {"role": "assistant", "content": '{"reasoning": "Dit betreft horeca-logistiek en bedrijfsvoering, geen voedselcultuur.", "label": 0}'},
+            {
+                "role": "user",
+                "content": "Van terrasdirigent tot verwijderde lantaarnpalen: de horeca is er klaar voor",
+            },
+            {
+                "role": "assistant",
+                "content": '{"reasoning": "Dit betreft horeca-logistiek en bedrijfsvoering, geen voedselcultuur.", "label": 0}',
+            },
             # Clear Hit: Recipes/Cooking (1)
-            {"role": "user", "content": "Recept voor bitterballen/kroketten? Ik ben opzoek naar iedereens favoriete recept..."},
-            {"role": "assistant", "content": '{"reasoning": "Vraag naar recepten voor traditionele Nederlandse snacks.", "label": 1}'},
+            {
+                "role": "user",
+                "content": "Recept voor bitterballen/kroketten? Ik ben opzoek naar iedereens favoriete recept...",
+            },
+            {
+                "role": "assistant",
+                "content": '{"reasoning": "Vraag naar recepten voor traditionele Nederlandse snacks.", "label": 1}',
+            },
             # The actual target
             {"role": "user", "content": f"{reddit_text}"},
         ]
@@ -136,29 +193,53 @@ Respond exclusively in JSON format. Provide a short 'reasoning' (maximum 15 word
 
         return [
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": "Dutch agricultural exports have never been higher"},
-            {"role": "assistant", "content": '{"reasoning": "Discusses macroeconomic exports, not literal eating culture.", "label": 0}'},
-            {"role": "user", "content": "Does anyone have spare Albert Heijn pan stamps to share?"},
-            {"role": "assistant", "content": '{"reasoning": "Supermarket loyalty program, unrelated to culinary habits.", "label": 0}'},
+            {
+                "role": "user",
+                "content": "Dutch agricultural exports have never been higher",
+            },
+            {
+                "role": "assistant",
+                "content": '{"reasoning": "Discusses macroeconomic exports, not literal eating culture.", "label": 0}',
+            },
+            {
+                "role": "user",
+                "content": "Does anyone have spare Albert Heijn pan stamps to share?",
+            },
+            {
+                "role": "assistant",
+                "content": '{"reasoning": "Supermarket loyalty program, unrelated to culinary habits.", "label": 0}',
+            },
             {"role": "user", "content": "Broodje hagelslag with or without butter?"},
-            {"role": "assistant", "content": '{"reasoning": "Debate about preparing a traditional Dutch breakfast item.", "label": 1}'},
-            {"role": "user", "content": "From terrace managers to removed lampposts: the hospitality sector is ready"},
-            {"role": "assistant", "content": '{"reasoning": "Hospitality business logistics, not actual food culture.", "label": 0}'},
-            {"role": "user", "content": "Recipe for bitterballen/kroketten? I am looking for everyone's favorite recipe..."},
-            {"role": "assistant", "content": '{"reasoning": "Seeking a recipe for traditional Dutch snacks.", "label": 1}'},
+            {
+                "role": "assistant",
+                "content": '{"reasoning": "Debate about preparing a traditional Dutch breakfast item.", "label": 1}',
+            },
+            {
+                "role": "user",
+                "content": "From terrace managers to removed lampposts: the hospitality sector is ready",
+            },
+            {
+                "role": "assistant",
+                "content": '{"reasoning": "Hospitality business logistics, not actual food culture.", "label": 0}',
+            },
+            {
+                "role": "user",
+                "content": "Recipe for bitterballen/kroketten? I am looking for everyone's favorite recipe...",
+            },
+            {
+                "role": "assistant",
+                "content": '{"reasoning": "Seeking a recipe for traditional Dutch snacks.", "label": 1}',
+            },
             {"role": "user", "content": f"{reddit_text}"},
         ]
     else:
-        raise ValueError(f"Unsupported language: {language}. Supported languages are 'en' and 'nl'.")
+        raise ValueError(
+            f"Unsupported language: {language}. Supported languages are 'en' and 'nl'."
+        )
 
 
 def main():
     print("In main() function")
-
-    if not os.environ.get("HF_TOKEN"):
-        raise ValueError(
-            "HF_TOKEN environment variable not set. Please set it in your .env file with a HuggingFace API token."
-        )
 
     LLM_NAME = os.environ.get("LLM_NAME")
 
@@ -285,6 +366,8 @@ def main():
             f_out.write(json.dumps(output_data) + "\n")
 
     print(f"Analysis complete. Results saved to {results_file}")
+    print("Uploading results to Hugging Face...")
+    upload_results_to_huggingface(results_file, LLM_NAME)
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ dill==0.4.1
 dotenv==0.9.9
 fasttext==0.9.3
 ftfy==6.3.1
+huggingface-hub>=0.34.0
 joblib==1.5.3
 nltk==3.9.4
 numpy==2.4.4
