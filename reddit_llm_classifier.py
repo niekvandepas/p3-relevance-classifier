@@ -347,7 +347,7 @@ def main():
     formatted_prompts = []
 
     for item in tqdm(all_items, desc="Formatting"):
-        if LLM_NAME == "BramVanroy/fietje-2-chat":
+        if LLM_NAME == "BramVanroy/fietje-2-instruct":
             item_text = item["text"][
                 :2040
             ]  # Fietje has a 2048 token limit, so we truncate to be safe. We will recover the full text later in the analysis phase.
