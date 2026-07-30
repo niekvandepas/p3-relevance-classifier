@@ -251,11 +251,17 @@ def main():
     print(f"Applying chat templates to {len(all_items)} items...")
     formatted_prompts = []
 
+    # Fix GEITje's tokenizer config mismatch
+    if LLM_NAME == "BramVanroy/GEITje-7B-ultra":
+        tokenizer.model_max_length = 32768
+
     for item in tqdm(all_items, desc="Formatting"):
         if LLM_NAME == "BramVanroy/fietje-2-instruct":
             item_text = item["plain_text"][
                 :2040
             ]  # Fietje has a 2048 token limit, so we truncate to be safe. We will recover the full text later in the analysis phase.
+        elif LLM_NAME == "BramVanroy/GEITje-7B-ultra":
+            item_text = item["plain_text"][:95000]
         else:
             item_text = item["plain_text"]
 
