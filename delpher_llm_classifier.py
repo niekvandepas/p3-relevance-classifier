@@ -6,7 +6,7 @@ from pathlib import Path
 from huggingface_hub import HfApi
 
 # vllm does not build on macOS, so silence import error
-from project_types import RedditItem
+from project_types import DelpherItem
 
 from vllm import LLM, SamplingParams  # type: ignore
 from vllm.sampling_params import StructuredOutputsParams  # type: ignore
@@ -70,7 +70,7 @@ LLM_JSON_SCHEMA = {
 }
 
 
-def import_data(data_file: Path, limit: int | None = None) -> list[RedditItem]:
+def import_data(data_file: Path, limit: int | None = None) -> list[DelpherItem]:
     results = []
 
     with open(data_file, "r", encoding="utf-8") as f:
@@ -253,11 +253,11 @@ def main():
 
     for item in tqdm(all_items, desc="Formatting"):
         if LLM_NAME == "BramVanroy/fietje-2-instruct":
-            item_text = item["text"][
+            item_text = item["plain_text"][
                 :2040
             ]  # Fietje has a 2048 token limit, so we truncate to be safe. We will recover the full text later in the analysis phase.
         else:
-            item_text = item["text"]
+            item_text = item["plain_text"]
 
         messages = build_prompt(item_text)
         formatted_prompt = tokenizer.apply_chat_template(
@@ -286,11 +286,11 @@ def main():
                 reasoning = "JSON parsing error"
 
             output_data = {
-                "id": item["id"],
+                "id": item["identifier"],
                 "model": LLM_NAME,
                 "label": label,
                 "reasoning": reasoning,
-                "text": item["text"],
+                "text": item["plain_text"],
             }
 
             f_out.write(json.dumps(output_data) + "\n")
