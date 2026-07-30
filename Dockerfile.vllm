@@ -18,6 +18,7 @@ RUN apt-get update && \
 # 3. The Code (Moved to /app to avoid RunPod's volume mount)
 WORKDIR /app
 COPY ./reddit_llm_classifier.py /app
+COPY ./delpher_llm_classifier.py /app
 COPY ./constants.py .
 COPY ./project_types.py .
 

@@ -136,20 +136,23 @@ Antwoord uitsluitend in JSON-formaat. Geef eerst een korte 'reasoning' (maximaal
             "role": "assistant",
             "content": '{"reasoning": "Dit gaat over macro-economische export, niet over eetcultuur.", "label": 0}',
         },
-        # Edge Case: Supermarket logic (0)
+        # Edge Case: Mentions Dutch food, but only in passing (0)
         {
             "role": "user",
-            "content": "Iemand nog pannenzegels van de AH over om te delen?",
+            "content": "De bus gaat mee naar de Krim als leverancier van zware truckerskost: biefstuk, gehaktballen, boerenkool met worst, bami, nasi en erwtensoep en eindeloze hoeveelheden koffie. De Lodewijks ontpoppen zich als schatten van mensen met een warm gevoel voor de zwakkeren in de voormalige Sovjet-Unie.",
         },
         {
             "role": "assistant",
-            "content": '{"reasoning": "Dit is een supermarkt spaaractie, geen maaltijd of culinair gebruik.", "label": 0}',
+            "content": '{"reasoning": "Gerechten worden slechts terloops genoemd als reisproviand, zonder verdere culturele context.", "label": 0}',
         },
-        # Clear Hit: Culinary Culture (1)
-        {"role": "user", "content": "Broodje hagelslag met of zonder boter?"},
+        # Clear Irrelevant: Advertisements/Events (0)
+        {
+            "role": "user",
+            "content": "Advertentie Evenementen Boeken + ansichtkaartenbeurs ZONDAG 10 JUNI üinbaanhal, Baanstr. 4 nabij de Westhavenkade Vlaardingen, van 10-16 uur. Info 010-4742916. Offroad AVONTUUR beleven met Jeeps, Quads en Amfibies?",
+        },
         {
             "role": "assistant",
-            "content": '{"reasoning": "Discussie over de bereiding van een typisch Nederlands ontbijt.", "label": 1}',
+            "content": '{"reasoning": "Dit is een overzicht van advertenties en evenementen, geen voedselcultuur.", "label": 0}',
         },
         # Edge Case: General hospitality/business (0)
         {
@@ -163,11 +166,11 @@ Antwoord uitsluitend in JSON-formaat. Geef eerst een korte 'reasoning' (maximaal
         # Clear Hit: Recipes/Cooking (1)
         {
             "role": "user",
-            "content": "Recept voor bitterballen/kroketten? Ik ben opzoek naar iedereens favoriete recept...",
+            "content": 'We mogen best wat trotser zijn op de vaderlandse keuken, vindt Van Gemst. "Je hoort zo vaak dat de Nederlandse eetcultuur niets voorstelt en dat onze keuken zo eenvoudig is, maar dat is de Toscaanse keuken ook. Vraag een Nederlander naar typisch Nederlandse producten, dan komt-ie aan met stamppot, erwtensoep en boerenkool."',
         },
         {
             "role": "assistant",
-            "content": '{"reasoning": "Vraag naar recepten voor traditionele Nederlandse snacks.", "label": 1}',
+            "content": '{"reasoning": "Expliciete discussie over de Nederlandse eetcultuur, vaderlandse keuken en typische gerechten.", "label": 1}',
         },
         # The actual target
         {"role": "user", "content": f"{article_text}"},
