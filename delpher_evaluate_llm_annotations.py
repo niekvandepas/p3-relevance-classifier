@@ -5,7 +5,7 @@ import json
 from sklearn.metrics import classification_report, cohen_kappa_score, confusion_matrix
 
 script_dir = Path(__file__).parent
-results_dir = script_dir / "artifacts" / "reddit" / "results" / "llm"
+results_dir = script_dir / "artifacts" / "delpher" / "results" / "llm"
 
 all_data = []
 
@@ -23,29 +23,29 @@ df["label"] = df["label"].astype(str).str.strip()
 
 # Pivot the data: This resolves the 20 duplicates by taking the first appearance
 df_labels = df.pivot_table(
-    index="id", columns="model", values="label", aggfunc="first"
+    index="identifier", columns="model", values="label", aggfunc="first"
 ).reset_index()
 
 # Remove the name of the columns index (makes it look like a normal DataFrame)
 df_labels.columns.name = None
 
-# Grab the longest version of the text for each ID (recovers Fietje's truncations)
-df["text_len"] = df["text"].str.len()
-df_text = df.sort_values("text_len", ascending=False).drop_duplicates("id")[
-    ["id", "text"]
+# Grab the longest version of the plain_text for each identifier (recovers Fietje's truncations)
+df["text_len"] = df["plain_text"].str.len()
+df_text = df.sort_values("text_len", ascending=False).drop_duplicates("identifier")[
+    ["identifier", "plain_text"]
 ]
 
 # Final Merge
-df_final = pd.merge(df_text, df_labels, on="id", how="left")
+df_final = pd.merge(df_text, df_labels, on="identifier", how="left")
 
 # Print the result
-print(f"Merged {len(df_final)} unique Reddit items.")
+print(f"Merged {len(df_final)} unique Delpher articles.")
 print(f"Columns found: {df_final.columns.tolist()}")
 print("\nFirst 5 rows:")
 print(df_final.head())
 
 
-model_cols = [c for c in df_final.columns if c not in ["id", "text"]]
+model_cols = [c for c in df_final.columns if c not in ["identifier", "plain_text"]]
 agreement_series = (df_final[model_cols] == "1").sum(axis=1)
 relevant_consensus = (agreement_series > 3).sum()
 irrelevant_consensus = (agreement_series < 2).sum()
@@ -56,7 +56,7 @@ print(f"Total High-Confidence Items: {relevant_consensus + irrelevant_consensus}
 
 
 # 1. Calculate the number of '1' votes per row
-model_cols = [c for c in df_final.columns if c not in ["id", "text"]]
+model_cols = [c for c in df_final.columns if c not in ["identifier", "plain_text"]]
 agreement_series = (df_final[model_cols] == "1").sum(axis=1)
 
 # 2. In a 5-model setup, 'No Agreement' (maximum conflict) is a 3-2 split.
@@ -71,7 +71,7 @@ print(
 
 # 3. Peek at the 'messy' data to see why they disagree
 print("\nExamples of high-conflict rows:")
-print(df_final[no_agreement_mask][["text"] + model_cols].head())
+print(df_final[no_agreement_mask][["plain_text"] + model_cols].head())
 
 # df_final.to_csv("master_llm_consensus.csv", index=False)
 
@@ -120,11 +120,11 @@ if ANNOTATIONS_FILE.exists():
         gold_dict = json.load(f)
 
     # Convert dictionary to DataFrame
-    df_gold = pd.DataFrame(list(gold_dict.items()), columns=["id", "gold_label"])
+    df_gold = pd.DataFrame(list(gold_dict.items()), columns=["identifier", "gold_label"])
     df_gold["gold_label"] = df_gold["gold_label"].astype(int)
 
     # Inner merge to evaluate ONLY the items I manually labeled
-    df_eval = pd.merge(df_final, df_gold, on="id", how="inner")
+    df_eval = pd.merge(df_final, df_gold, on="identifier", how="inner")
 
     print(f"\n" + "=" * 60)
     print(f" SKLEARN GOLD STANDARD EVALUATION ({len(df_eval)} items) ")
