@@ -113,7 +113,7 @@ precision_ensembles = [
 model_cols.extend(precision_ensembles)
 
 
-ANNOTATIONS_FILE = script_dir / "annotations" / "manual_eval_labels.json"
+ANNOTATIONS_FILE = script_dir / "annotations" / "reddit_manual_eval_labels.json"
 
 if ANNOTATIONS_FILE.exists():
     with open(ANNOTATIONS_FILE, "r") as f:

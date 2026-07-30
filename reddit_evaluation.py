@@ -57,7 +57,7 @@ warnings.filterwarnings(
 
 script_dir = Path(__file__).parent
 results_dir = script_dir / "artifacts" / "results" / "llm"
-gold_annotations_file = script_dir / "annotations" / "manual_eval_labels.json"
+gold_annotations_file = script_dir / "annotations" / "reddit_manual_eval_labels.json"
 
 
 def evaluate_human_labeled_ml_models(

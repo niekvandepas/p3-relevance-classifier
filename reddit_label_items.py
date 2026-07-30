@@ -35,7 +35,7 @@ def import_data(data_file: Path, limit: int | None = None) -> list[RedditItem]:
     return results
 
 
-REDDIT_LLM_ANNOTATIONS_FILE = "annotations/manual_eval_labels.json"
+REDDIT_LLM_ANNOTATIONS_FILE = "annotations/reddit_manual_eval_labels.json"
 
 print("Fetching data from HuggingFace Hub (or cache if available)")
 reddit_items_data_path = get_data_path(REDDIT_LANGUAGE)
