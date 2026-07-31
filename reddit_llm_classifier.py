@@ -321,7 +321,9 @@ def main():
             f"Applying LLM_CLASSIFICATION_RATIO={ratio}; running on {len(all_items)} items."
         )
     else:
-        print(f"LLM_CLASSIFICATION_RATIO not set; running full dataset ({len(all_items)} items).")
+        print(
+            f"LLM_CLASSIFICATION_RATIO not set; running full dataset ({len(all_items)} items)."
+        )
 
     safe_model_name = LLM_NAME.replace("/", "-").replace(":", "-")
 
