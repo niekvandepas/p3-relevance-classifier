@@ -262,6 +262,8 @@ def main():
             ]  # Fietje has a 2048 token limit, so we truncate to be safe. We will recover the full text later in the analysis phase.
         elif LLM_NAME == "BramVanroy/GEITje-7B-ultra":
             item_text = item["plain_text"][:95000]
+        if LLM_NAME == "QuantTrio/Qwen3.6-27B-AWQ":
+            item_text = item["plain_text"][:8000]
         else:
             item_text = item["plain_text"]
 
