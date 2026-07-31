@@ -351,6 +351,8 @@ def main():
             item_text = item["text"][
                 :2040
             ]  # Fietje has a 2048 token limit, so we truncate to be safe. We will recover the full text later in the analysis phase.
+        if LLM_NAME == "QuantTrio/Qwen3.6-27B-AWQ":
+            item_text = item["text"][:8000]
         else:
             item_text = item["text"]
 
