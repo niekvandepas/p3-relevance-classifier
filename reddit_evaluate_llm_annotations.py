@@ -46,16 +46,17 @@ print(f"Columns found: {df_final.columns.tolist()}")
 print("\nFirst 5 rows:")
 print(df_final.head())
 
-
 model_cols = [c for c in df_final.columns if c not in ["id", "text"]]
+# Count how many models predicted "1" (relevant) for each row (axis=1 sums across columns for each row)
 agreement_series = (df_final[model_cols] == "1").sum(axis=1)
+# Count the total number of rows where more than 3 models voted "1" (strong consensus on 'relevant')
 relevant_consensus = (agreement_series > 3).sum()
+# Count the total number of rows where fewer than 2 models voted "1" (strong consensus on 'irrelevant', i.e., 0 or 1 vote)
 irrelevant_consensus = (agreement_series < 2).sum()
 
 print(f"Items with >3 models agreeing on RELEVANT: {relevant_consensus}")
 print(f"Items with >3 models agreeing on IRRELEVANT: {irrelevant_consensus}")
 print(f"Total High-Confidence Items: {relevant_consensus + irrelevant_consensus}")
-
 
 # 1. Calculate the number of '1' votes per row
 model_cols = [c for c in df_final.columns if c not in ["id", "text"]]
