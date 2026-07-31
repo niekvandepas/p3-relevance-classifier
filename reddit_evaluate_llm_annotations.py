@@ -6,6 +6,15 @@ from sklearn.metrics import classification_report, cohen_kappa_score, confusion_
 
 from constants import REDDIT_LANGUAGE
 
+# ==========================================
+# CONSENSUS CONFIGURATION
+# ==========================================
+# Minimum number of models that must vote "1" for a row to count as a strong
+# RELEVANT consensus. The IRRELEVANT consensus cutoff is derived symmetrically
+# from this (num_models - CONSENSUS_THRESHOLD). Adjust this whenever the
+# number of models changes.
+CONSENSUS_THRESHOLD = 3
+
 script_dir = Path(__file__).parent
 results_dir = script_dir / "artifacts" / "results" / f"reddit-{REDDIT_LANGUAGE}" / "llm"
 
@@ -47,27 +56,36 @@ print("\nFirst 5 rows:")
 print(df_final.head())
 
 model_cols = [c for c in df_final.columns if c not in ["id", "text"]]
+# Symmetric cutoff: with N models, needing >= CONSENSUS_THRESHOLD votes for
+# RELEVANT means the mirror-image IRRELEVANT cutoff is <= (N - CONSENSUS_THRESHOLD) votes.
+IRRELEVANT_CONSENSUS_THRESHOLD = len(model_cols) - CONSENSUS_THRESHOLD
+
 # Count how many models predicted "1" (relevant) for each row (axis=1 sums across columns for each row)
 agreement_series = (df_final[model_cols] == "1").sum(axis=1)
-# Count the total number of rows where more than 3 models voted "1" (strong consensus on 'relevant')
-relevant_consensus = (agreement_series > 3).sum()
-# Count the total number of rows where fewer than 2 models voted "1" (strong consensus on 'irrelevant', i.e., 0 or 1 vote)
-irrelevant_consensus = (agreement_series < 2).sum()
+# Count the total number of rows with strong consensus on 'relevant'
+relevant_consensus = (agreement_series >= CONSENSUS_THRESHOLD).sum()
+# Count the total number of rows with strong consensus on 'irrelevant'
+irrelevant_consensus = (agreement_series <= IRRELEVANT_CONSENSUS_THRESHOLD).sum()
 
-print(f"Items with >3 models agreeing on RELEVANT: {relevant_consensus}")
-print(f"Items with >3 models agreeing on IRRELEVANT: {irrelevant_consensus}")
+print(
+    f"Items with >={CONSENSUS_THRESHOLD} models agreeing on RELEVANT: {relevant_consensus}"
+)
+print(
+    f"Items with <={IRRELEVANT_CONSENSUS_THRESHOLD} models agreeing on RELEVANT (i.e. IRRELEVANT consensus): {irrelevant_consensus}"
+)
 print(f"Total High-Confidence Items: {relevant_consensus + irrelevant_consensus}")
 
 # 1. Calculate the number of '1' votes per row
 model_cols = [c for c in df_final.columns if c not in ["id", "text"]]
 agreement_series = (df_final[model_cols] == "1").sum(axis=1)
 
-# 2. In a 5-model setup, 'No Agreement' (maximum conflict) is a 3-2 split.
-# This means the sum of '1s' is either 2 or 3.
-no_agreement_mask = (agreement_series == 2) | (agreement_series == 3)
+# 2. 'No Agreement' is any vote count strictly between the two consensus thresholds
+no_agreement_mask = (agreement_series > IRRELEVANT_CONSENSUS_THRESHOLD) & (
+    agreement_series < CONSENSUS_THRESHOLD
+)
 no_agreement_count = no_agreement_mask.sum()
 
-print(f"Total rows with no strong agreement (3-2 split): {no_agreement_count}")
+print(f"Total rows with no strong agreement: {no_agreement_count}")
 print(
     f"Percentage of dataset in conflict: {(no_agreement_count / len(df_final)) * 100:.2f}%"
 )
