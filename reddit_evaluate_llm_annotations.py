@@ -23,7 +23,7 @@ df = pd.DataFrame(all_data)
 # Clean up: Force labels to strings and strip whitespace to ensure "1" == " 1"
 df["label"] = df["label"].astype(str).str.strip()
 
-# Pivot the data: This resolves the 20 duplicates by taking the first appearance
+# Pivot the data: remove duplicate entries for the same id and model, keeping the first occurrence
 df_labels = df.pivot_table(
     index="id", columns="model", values="label", aggfunc="first"
 ).reset_index()
