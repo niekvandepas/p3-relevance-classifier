@@ -1,5 +1,6 @@
 import json
 import os
+import random
 from pathlib import Path
 from dotenv import load_dotenv
 from project_types import DelpherItem
@@ -47,6 +48,7 @@ print("Loading Delpher data from local .ndjson file")
 delpher_items_data_path = get_data_path()
 
 delpher_items = import_data(delpher_items_data_path)
+random.shuffle(delpher_items)
 
 annotations_dict = {}
 
@@ -62,6 +64,7 @@ for delpher_item in delpher_items:
 
     text = delpher_item["plain_text"]
 
+    print(delpher_item["title"].upper())
     print(preview_text(text))
     print("")
 
