@@ -4,8 +4,10 @@ import json
 
 from sklearn.metrics import classification_report, cohen_kappa_score, confusion_matrix
 
+from constants import REDDIT_LANGUAGE
+
 script_dir = Path(__file__).parent
-results_dir = script_dir / "artifacts" / "reddit" / "results" / "llm"
+results_dir = script_dir / "artifacts" / "results" / f"reddit-{REDDIT_LANGUAGE}" / "llm"
 
 all_data = []
 
