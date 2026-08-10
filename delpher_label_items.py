@@ -48,7 +48,9 @@ print("Loading Delpher data from local .ndjson file")
 delpher_items_data_path = get_data_path()
 
 delpher_items = import_data(delpher_items_data_path)
-random.shuffle(delpher_items)
+LABELING_RANDOM_SEED = int(os.environ.get("LABELING_RANDOM_SEED", "42"))
+random.Random(LABELING_RANDOM_SEED).shuffle(delpher_items)
+print(f"Sampling items with random seed: {LABELING_RANDOM_SEED}")
 
 annotations_dict = {}
 
