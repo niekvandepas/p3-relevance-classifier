@@ -1,3 +1,4 @@
+import re
 from typing import TypedDict
 import json
 from pathlib import Path
@@ -13,7 +14,7 @@ def get_data_path(language: str) -> Path:
     file_type: 'posts' or 'comments'
     language: 'en' or 'nl'
     """
-    filename = f"reddit-{language}-posts_and_comments-filtered_NLsekeuken-eten-culinair-sample_200.ndjson"
+    filename = f"reddit-{language}-all.ndjson"
 
     # This will download the file if missing, or return the path if it exists
     cached_path = hf_hub_download(
@@ -42,6 +43,64 @@ reddit_items_data_path = get_data_path(REDDIT_LANGUAGE)
 
 reddit_items = import_data(reddit_items_data_path)
 
+
+KEYWORDS = (
+    [
+        "eten",
+        "culinair",
+        "nederlands",
+        "hollands",
+        "stamppot",
+        "stroopwafel",
+        "bitterballen",
+        "boerenkool",
+        "erwtensoep",
+        "kroket",
+        "poffertjes",
+        "pannenkoeken",
+        "haring",
+        "kibbeling",
+        "drop",
+        "hagelslag",
+        "smakelijk",
+        "gerecht",
+        "lekker",
+        "maaltijd",
+    ]
+    if REDDIT_LANGUAGE == "nl"
+    else [
+        "food",
+        "culinary",
+        "dutch",
+        "stamppot",
+        "stroopwafel",
+        "stroopwafels",
+        "bitterballen",
+        "bitterbal",
+        "poffertjes",
+        "kroket",
+        "kibbeling",
+        "hagelslag",
+        "kale",
+        "pea soup",
+        "croquette",
+        "croquettes",
+        "pancakes",
+        "herring",
+        "licorice",
+        "chocolate sprinkles",
+        "dish",
+        "tasty",
+        "meal",
+    ]
+)
+
+KEYWORDS_PATTERN = re.compile(r"\b(" + "|".join(KEYWORDS) + r")\b", re.IGNORECASE)
+
+filtered_reddit_items = [
+    item for item in reddit_items if KEYWORDS_PATTERN.search(item["text"])
+]
+
 annotations_dict = {}
 
 if Path(REDDIT_LLM_ANNOTATIONS_FILE).exists():
@@ -50,7 +109,7 @@ if Path(REDDIT_LLM_ANNOTATIONS_FILE).exists():
 
 quit_requested = False
 
-for reddit_item in reddit_items:
+for reddit_item in filtered_reddit_items:
     if reddit_item["id"] in annotations_dict:
         continue
 
