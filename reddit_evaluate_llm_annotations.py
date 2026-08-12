@@ -101,37 +101,37 @@ print(df_final[no_agreement_mask][["text"] + model_cols].head())
 # ==========================================
 
 # 1. Top 2 Unanimous (Two best models must both say 1)
-top_2_models = ["Qwen/Qwen2.5-7B-Instruct", "mistralai/Mistral-Medium-3.5-128B"]
-df_top2 = df_final[top_2_models].apply(pd.to_numeric, errors="coerce").fillna(0)
-df_final["Ensemble_Top2_Unanimous"] = (df_top2.sum(axis=1) == 2).astype(int).astype(str)
+# top_2_models = ["Qwen/Qwen2.5-7B-Instruct", "mistralai/Mistral-Medium-3.5-128B"]
+# df_top2 = df_final[top_2_models].apply(pd.to_numeric, errors="coerce").fillna(0)
+# df_final["Ensemble_Top2_Unanimous"] = (df_top2.sum(axis=1) == 2).astype(int).astype(str)
 
 # 2. Top 3 Unanimous (Adds Dutch specialist to the strict requirement)
-top_3_models = [
-    "Qwen/Qwen2.5-7B-Instruct",
-    "mistralai/Mistral-Medium-3.5-128B",
-    "BramVanroy/GEITje-7B-ultra",
-]
-df_top3 = df_final[top_3_models].apply(pd.to_numeric, errors="coerce").fillna(0)
-df_final["Ensemble_Top3_Unanimous"] = (df_top3.sum(axis=1) == 3).astype(int).astype(str)
+# top_3_models = [
+#     "Qwen/Qwen2.5-7B-Instruct",
+#     "mistralai/Mistral-Medium-3.5-128B",
+#     "BramVanroy/GEITje-7B-ultra",
+# ]
+# df_top3 = df_final[top_3_models].apply(pd.to_numeric, errors="coerce").fillna(0)
+# df_final["Ensemble_Top3_Unanimous"] = (df_top3.sum(axis=1) == 3).astype(int).astype(str)
 
 # 3. Global Triad Unanimous (Strictest baseline across global architectures)
-global_models = [
-    "Qwen/Qwen2.5-7B-Instruct",
-    "mistralai/Mistral-Medium-3.5-128B",
-    "Qwen/Qwen3.6-27B",
-]
-df_global = df_final[global_models].apply(pd.to_numeric, errors="coerce").fillna(0)
-df_final["Ensemble_Global_Triad_Unanimous"] = (
-    (df_global.sum(axis=1) == 3).astype(int).astype(str)
-)
+# global_models = [
+#     "Qwen/Qwen2.5-7B-Instruct",
+#     "mistralai/Mistral-Medium-3.5-128B",
+#     "Qwen/Qwen3.6-27B",
+# ]
+# df_global = df_final[global_models].apply(pd.to_numeric, errors="coerce").fillna(0)
+# df_final["Ensemble_Global_Triad_Unanimous"] = (
+#     (df_global.sum(axis=1) == 3).astype(int).astype(str)
+# )
 
 # Add ensembles to the evaluation pipeline
-precision_ensembles = [
-    "Ensemble_Top2_Unanimous",
-    "Ensemble_Top3_Unanimous",
-    "Ensemble_Global_Triad_Unanimous",
-]
-model_cols.extend(precision_ensembles)
+# precision_ensembles = [
+#     "Ensemble_Top2_Unanimous",
+#     "Ensemble_Top3_Unanimous",
+#     "Ensemble_Global_Triad_Unanimous",
+# ]
+# model_cols.extend(precision_ensembles)
 
 
 ANNOTATIONS_FILE = (
@@ -213,7 +213,7 @@ if ANNOTATIONS_FILE.exists():
     )
 
     # Save summary metrics to disk
-    metrics_out = script_dir / "artifacts" / "llm_sklearn_evaluation.csv"
+    metrics_out = script_dir / "artifacts" / "results" / f"reddit-{REDDIT_LANGUAGE}" / "classification-evaluation.csv"
     metrics_out.parent.mkdir(parents=True, exist_ok=True)
     df_metrics.to_csv(metrics_out)
     print(f"\nLeaderboard metrics saved to {metrics_out}")

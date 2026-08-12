@@ -1,8 +1,11 @@
 import re
+import random
+import os
 from typing import TypedDict
 import json
 from pathlib import Path
 from huggingface_hub import hf_hub_download
+from tqdm import tqdm
 from project_types import RedditItem
 from constants import REDDIT_LANGUAGE
 from util import preview_text, print_divider, print_header
@@ -36,7 +39,9 @@ def import_data(data_file: Path, limit: int | None = None) -> list[RedditItem]:
     return results
 
 
-REDDIT_LLM_ANNOTATIONS_FILE = "annotations/reddit_manual_eval_labels.json"
+REDDIT_LLM_ANNOTATIONS_FILE = (
+    f"annotations/reddit_{REDDIT_LANGUAGE}_manual_eval_labels.json"
+)
 
 print("Fetching data from HuggingFace Hub (or cache if available)")
 reddit_items_data_path = get_data_path(REDDIT_LANGUAGE)
@@ -97,9 +102,14 @@ KEYWORDS = (
 
 KEYWORDS_PATTERN = re.compile(r"\b(" + "|".join(KEYWORDS) + r")\b", re.IGNORECASE)
 
-filtered_reddit_items = [
-    item for item in reddit_items if KEYWORDS_PATTERN.search(item["text"])
-]
+print("Filtering Reddit items based on keywords...")
+
+filtered_reddit_items = []
+for item in tqdm(reddit_items):
+    if KEYWORDS_PATTERN.search(item["text"]):
+        filtered_reddit_items.append(item)
+
+random.Random(42).shuffle(filtered_reddit_items)
 
 annotations_dict = {}
 
