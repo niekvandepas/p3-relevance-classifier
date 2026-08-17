@@ -17,5 +17,5 @@ dependencies = [
     "sentence-transformers>=5.4.1",
     "small-text==1.4.1",
     "tqdm==4.67.3",
-    "vllm>=0.21.0; sys_platform == 'linux'",
+    "vllm>=0.27.0; sys_platform == 'linux'",
 ]
