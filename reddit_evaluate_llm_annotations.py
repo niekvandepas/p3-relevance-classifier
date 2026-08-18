@@ -3,6 +3,7 @@ from pathlib import Path
 import json
 
 from sklearn.metrics import classification_report, cohen_kappa_score, confusion_matrix
+from tqdm import tqdm
 
 from constants import REDDIT_LANGUAGE
 
@@ -21,7 +22,7 @@ results_dir = script_dir / "artifacts" / "results" / f"reddit-{REDDIT_LANGUAGE}"
 all_data = []
 
 # Load all ndjson files
-for file_path in results_dir.glob("*.ndjson"):
+for file_path in tqdm(results_dir.glob("*.ndjson"), desc="Loading ndjson files"):
     with open(file_path, "r", encoding="utf-8") as f:
         for line in f:
             if line.strip():
@@ -213,7 +214,13 @@ if ANNOTATIONS_FILE.exists():
     )
 
     # Save summary metrics to disk
-    metrics_out = script_dir / "artifacts" / "results" / f"reddit-{REDDIT_LANGUAGE}" / "classification-evaluation.csv"
+    metrics_out = (
+        script_dir
+        / "artifacts"
+        / "results"
+        / f"reddit-{REDDIT_LANGUAGE}"
+        / "classification-evaluation.csv"
+    )
     metrics_out.parent.mkdir(parents=True, exist_ok=True)
     df_metrics.to_csv(metrics_out)
     print(f"\nLeaderboard metrics saved to {metrics_out}")
