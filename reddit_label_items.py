@@ -83,6 +83,8 @@ EN_PATTERN = re.compile(
 
 KEYWORDS_PATTERN = NL_PATTERN if REDDIT_LANGUAGE == "nl" else EN_PATTERN
 
+BOLD = "\033[1m"
+RESET = "\033[0m"
 random.Random(42).shuffle(reddit_items)
 
 annotations_dict = {}
@@ -99,7 +101,9 @@ for reddit_item in reddit_items:
 
     text = reddit_item["text"]
 
-    print(preview_text(text))
+    preview = preview_text(text)
+    highlighted_preview = KEYWORDS_PATTERN.sub(rf"{BOLD}\g<0>{RESET}", preview)
+    print(highlighted_preview)
     print("")
 
     while True:
