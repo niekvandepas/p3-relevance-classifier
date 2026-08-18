@@ -93,13 +93,24 @@ if Path(REDDIT_LLM_ANNOTATIONS_FILE).exists():
     with open(REDDIT_LLM_ANNOTATIONS_FILE, "r") as f:
         annotations_dict = json.load(f)
 
+already_labeled = sum(1 for item in reddit_items if item["id"] in annotations_dict)
+print_header(
+    f"{already_labeled}/{len(reddit_items)} items already labeled. "
+    f"Annotations file: {REDDIT_LLM_ANNOTATIONS_FILE}"
+)
+
 quit_requested = False
 
-for reddit_item in reddit_items:
+for index, reddit_item in enumerate(reddit_items, start=1):
     if reddit_item["id"] in annotations_dict:
         continue
 
     text = reddit_item["text"]
+
+    print_divider()
+    print(f"Item {index}/{len(reddit_items)} (labeled so far: {len(annotations_dict)})")
+    print(f"ID: {reddit_item['id']}")
+    print("")
 
     preview = preview_text(text)
     highlighted_preview = KEYWORDS_PATTERN.sub(rf"{BOLD}\g<0>{RESET}", preview)
