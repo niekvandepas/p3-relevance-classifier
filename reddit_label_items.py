@@ -17,7 +17,7 @@ def get_data_path(language: str) -> Path:
     file_type: 'posts' or 'comments'
     language: 'en' or 'nl'
     """
-    filename = f"reddit-{language}-all.ndjson"
+    filename = f"reddit-{language}-keyword-filtered.ndjson"
 
     # This will download the file if missing, or return the path if it exists
     cached_path = hf_hub_download(
@@ -49,67 +49,41 @@ reddit_items_data_path = get_data_path(REDDIT_LANGUAGE)
 reddit_items = import_data(reddit_items_data_path)
 
 
-KEYWORDS = (
-    [
-        "eten",
-        "culinair",
-        "nederlands",
-        "hollands",
-        "stamppot",
-        "stroopwafel",
-        "bitterballen",
-        "boerenkool",
-        "erwtensoep",
-        "kroket",
-        "poffertjes",
-        "pannenkoeken",
-        "haring",
-        "kibbeling",
-        "drop",
-        "hagelslag",
-        "smakelijk",
-        "gerecht",
-        "lekker",
-        "maaltijd",
-    ]
-    if REDDIT_LANGUAGE == "nl"
-    else [
-        "food",
-        "culinary",
-        "dutch",
-        "stamppot",
-        "stroopwafel",
-        "stroopwafels",
-        "bitterballen",
-        "bitterbal",
-        "poffertjes",
-        "kroket",
-        "kibbeling",
-        "hagelslag",
-        "kale",
-        "pea soup",
-        "croquette",
-        "croquettes",
-        "pancakes",
-        "herring",
-        "licorice",
-        "chocolate sprinkles",
-        "dish",
-        "tasty",
-        "meal",
-    ]
+NL_PATTERN = re.compile(
+    r"\b("
+    r"eten|voedsel|koken|culinair|cuisine|gastronomisch|erfgoed|eetcultuur"
+    r"|boerenkool|stamppot|hutspot|zuurkool|snert|erwtensoep"
+    r"|oliebol|oliebollen|bitterbal|bitterballen|kroket|kroketten|frikandel|frikandellen"
+    r"|stroopwafel|stroopwafels|hagelslag|drop|speculaas|ontbijtkoek|poffertjes"
+    r"|haring|maatjesharing|kabeljauw|lekkerbek|lekkerbekje"
+    r"|kaas|gouda|leidse|alkmaarse"
+    r")\b"
+    r"|"
+    r"\b(nederlandse|hollandse|nederlands)\b.*\bkeuken\b"
+    r"|"
+    r"\bkeuken\b.*\b(nederlandse|hollandse|nederlands)\b",
+    flags=re.IGNORECASE,
 )
 
-KEYWORDS_PATTERN = re.compile(r"\b(" + "|".join(KEYWORDS) + r")\b", re.IGNORECASE)
+EN_PATTERN = re.compile(
+    r"\b("
+    r"food|cooking|cook|culinary|cuisine|gastronom|gastronomy|heritage|food\s*culture"
+    r"|kale|boerenkool|stamppot|hutspot|sauerkraut|zuurkool|snert|erwtensoep|pea\s*soup"
+    r"|oliebol|oliebollen|bitterbal|bitterballen|kroket|kroketten|croquette|croquettes|frikandel|frikandellen"
+    r"|stroopwafel|stroopwafels|hagelslag|sprinkles|drop|licorice|speculaas|ontbijtkoek|poffertjes"
+    r"|haring|herring|cod|kabeljauw|smelt|lekkerbek"
+    r"|cheese|kaas|gouda|leidse|alkmaarse"
+    r")\b"
+    r"|"
+    r"\b(dutch)\b.*\b(cuisine|cooking|food|kitchen)\b"
+    r"|"
+    r"\b(cuisine|cooking|food|kitchen)\b.*\b(dutch)\b",
+    flags=re.IGNORECASE,
+)
 
-print("Filtering Reddit items based on keywords...")
+KEYWORDS_PATTERN = NL_PATTERN if REDDIT_LANGUAGE == "nl" else EN_PATTERN
 
-filtered_reddit_items = []
-for item in tqdm(reddit_items):
-    if KEYWORDS_PATTERN.search(item["text"]):
-        filtered_reddit_items.append(item)
-
-random.Random(42).shuffle(filtered_reddit_items)
+random.Random(42).shuffle(reddit_items)
 
 annotations_dict = {}
 
@@ -119,7 +93,7 @@ if Path(REDDIT_LLM_ANNOTATIONS_FILE).exists():
 
 quit_requested = False
 
-for reddit_item in filtered_reddit_items:
+for reddit_item in reddit_items:
     if reddit_item["id"] in annotations_dict:
         continue
 
