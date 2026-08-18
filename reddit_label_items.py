@@ -108,7 +108,7 @@ for index, reddit_item in enumerate(reddit_items, start=1):
     text = reddit_item["text"]
 
     print_divider()
-    print(f"Item {index}/{len(reddit_items)} (labeled so far: {len(annotations_dict)})")
+    print(f"Item {index}/200 (labeled so far: {len(annotations_dict)})")
     print(f"ID: {reddit_item['id']}")
     print("")
 
