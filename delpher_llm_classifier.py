@@ -246,8 +246,7 @@ def main():
     )
 
     tokenizer = AutoTokenizer.from_pretrained(LLM_NAME)
-    llm = LLM(model=LLM_NAME, tensor_parallel_size=NUM_GPUS)
-
+    llm = LLM(model=LLM_NAME, tensor_parallel_size=NUM_GPUS, max_model_len=8192, max_num_seqs=64, gpu_memory_utilization=0.94)
     print(f"Applying chat templates to {len(all_items)} items...")
     formatted_prompts = []
 
@@ -265,7 +264,8 @@ def main():
         if LLM_NAME == "QuantTrio/Qwen3.6-27B-AWQ":
             item_text = item["plain_text"][:8000]
         else:
-            item_text = item["plain_text"]
+            tokens = tokenizer.encode(item["plain_text"], add_special_tokens=False)
+            item_text = tokenizer.decode(tokens[:8000])
 
         messages = build_prompt(item_text)
         formatted_prompt = tokenizer.apply_chat_template(
