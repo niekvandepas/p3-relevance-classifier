@@ -5,7 +5,7 @@ import json
 from sklearn.metrics import classification_report, cohen_kappa_score, confusion_matrix
 
 script_dir = Path(__file__).parent
-results_dir = script_dir / "artifacts" / "delpher" / "results" / "llm"
+results_dir = script_dir / "artifacts" / "results" / "delpher" / "llm"
 
 all_data = []
 
