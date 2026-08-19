@@ -1,7 +1,9 @@
-import pandas as pd
-from pathlib import Path
 import json
+from collections import Counter
+from itertools import combinations
+from pathlib import Path
 
+import pandas as pd
 from sklearn.metrics import classification_report, cohen_kappa_score, confusion_matrix
 from tqdm import tqdm
 
@@ -98,41 +100,105 @@ print(df_final[no_agreement_mask][["text"] + model_cols].head())
 # df_final.to_csv("master_llm_consensus.csv", index=False)
 
 # ==========================================
-# DEFINE PRECISION-FIRST ENSEMBLES
+# ENSEMBLE VOTING HELPERS
 # ==========================================
 
-# 1. Top 2 Unanimous (Two best models must both say 1)
-# top_2_models = ["Qwen/Qwen2.5-7B-Instruct", "mistralai/Mistral-Medium-3.5-128B"]
-# df_top2 = df_final[top_2_models].apply(pd.to_numeric, errors="coerce").fillna(0)
-# df_final["Ensemble_Top2_Unanimous"] = (df_top2.sum(axis=1) == 2).astype(int).astype(str)
 
-# 2. Top 3 Unanimous (Adds Dutch specialist to the strict requirement)
-# top_3_models = [
-#     "Qwen/Qwen2.5-7B-Instruct",
-#     "mistralai/Mistral-Medium-3.5-128B",
-#     "BramVanroy/GEITje-7B-ultra",
-# ]
-# df_top3 = df_final[top_3_models].apply(pd.to_numeric, errors="coerce").fillna(0)
-# df_final["Ensemble_Top3_Unanimous"] = (df_top3.sum(axis=1) == 3).astype(int).astype(str)
+def _majority_vote(
+    labels: list[str],
+    tie_break_priority: list[str] | None = None,
+) -> str:
+    """Return the majority label from a list of predictions.
 
-# 3. Global Triad Unanimous (Strictest baseline across global architectures)
-# global_models = [
-#     "Qwen/Qwen2.5-7B-Instruct",
-#     "mistralai/Mistral-Medium-3.5-128B",
-#     "Qwen/Qwen3.6-27B",
-# ]
-# df_global = df_final[global_models].apply(pd.to_numeric, errors="coerce").fillna(0)
-# df_final["Ensemble_Global_Triad_Unanimous"] = (
-#     (df_global.sum(axis=1) == 3).astype(int).astype(str)
-# )
+    When there is a tie, the label appearing first in *tie_break_priority* wins.
+    If no priority list is given, the alphabetically first label is chosen so
+    the result is deterministic.
+    """
+    counts = Counter(labels)
+    max_count = max(counts.values())
+    tied = [label for label, count in counts.items() if count == max_count]
+    if len(tied) == 1:
+        return tied[0]
+    if tie_break_priority:
+        for priority_label in tie_break_priority:
+            if priority_label in tied:
+                return priority_label
+    return sorted(tied)[0]
 
-# Add ensembles to the evaluation pipeline
-# precision_ensembles = [
-#     "Ensemble_Top2_Unanimous",
-#     "Ensemble_Top3_Unanimous",
-#     "Ensemble_Global_Triad_Unanimous",
-# ]
-# model_cols.extend(precision_ensembles)
+
+def _add_ensemble_columns(
+    df: pd.DataFrame,
+    model_cols: list[str],
+    tie_break_priority: list[str] | None = None,
+) -> list[str]:
+    """Add ensemble majority-vote columns to *df* in-place.
+
+    Generates:
+    1. ``ensemble::all (N)`` – vote across all models.
+    2. ``ensemble::top-K`` for K in {3, 5} – vote across the top-K models
+       (by column order, which mirrors the leaderboard sort the caller
+       performs).
+    3. Every combination of 3 or more models – useful for finding the best
+       possible ensemble.
+
+    Returns the list of newly created column names.
+    """
+    if len(model_cols) < 2:
+        return []
+
+    priority = tie_break_priority or ["0", "1"]
+    new_cols: list[str] = []
+
+    # --- Full ensemble across all models -----------------------------------
+    full_col = f"ensemble::all ({len(model_cols)})"
+    df[full_col] = df.apply(
+        lambda row: _majority_vote(
+            [row[c] for c in model_cols if pd.notna(row[c])],
+            tie_break_priority=priority,
+        )
+        if any(pd.notna(row[c]) for c in model_cols)
+        else None,
+        axis=1,
+    )
+    new_cols.append(full_col)
+
+    # --- Top-K ensembles ---------------------------------------------------
+    for k in (3, 5):
+        if k < len(model_cols):
+            top_k_cols = model_cols[:k]
+            col_name = f"ensemble::top-{k}"
+            df[col_name] = df.apply(
+                lambda row, _cols=top_k_cols: _majority_vote(
+                    [row[c] for c in _cols if pd.notna(row[c])],
+                    tie_break_priority=priority,
+                )
+                if any(pd.notna(row[c]) for c in _cols)
+                else None,
+                axis=1,
+            )
+            new_cols.append(col_name)
+
+    # --- All combinations of 3+ models ------------------------------------
+    if len(model_cols) <= 12:  # cap to avoid combinatorial explosion
+        for r in range(3, len(model_cols)):
+            for combo in combinations(model_cols, r):
+                combo_slugs = [c.split("/")[-1] for c in combo]
+                col_name = f"ensemble::combo({'+'.join(combo_slugs)})"
+                if col_name in new_cols:
+                    continue
+                combo_list = list(combo)
+                df[col_name] = df.apply(
+                    lambda row, _cols=combo_list: _majority_vote(
+                        [row[c] for c in _cols if pd.notna(row[c])],
+                        tie_break_priority=priority,
+                    )
+                    if any(pd.notna(row[c]) for c in _cols)
+                    else None,
+                    axis=1,
+                )
+                new_cols.append(col_name)
+
+    return new_cols
 
 
 ANNOTATIONS_FILE = (
@@ -200,6 +266,65 @@ if ANNOTATIONS_FILE.exists():
             }
         )
 
+    # Sort model columns by individual F1 (descending) so that top-K
+    # ensembles use the strongest models.
+    individual_f1: dict[str, float] = {}
+    for result in eval_results:
+        individual_f1[str(result["Model"])] = float(result["F1-Score (1)"])
+
+    model_cols_sorted = sorted(
+        model_cols,
+        key=lambda c: individual_f1.get(c, 0.0),
+        reverse=True,
+    )
+
+    # --- Build and evaluate ensemble columns -------------------------------
+    # Tie-break priority: prefer "0" (irrelevant) on ties for a conservative
+    # (precision-first) approach.
+    ensemble_cols = _add_ensemble_columns(
+        df_eval, model_cols_sorted, tie_break_priority=["0", "1"]
+    )
+
+    if ensemble_cols:
+        print(f"\n{'=' * 60}")
+        print(f" EVALUATING {len(ensemble_cols)} ENSEMBLE VOTING COMBINATION(S) ")
+        print("=" * 60)
+
+        for ens_col in ensemble_cols:
+            y_pred = (
+                pd.to_numeric(df_eval[ens_col], errors="coerce")
+                .fillna(-1)
+                .astype(int)
+            )
+            y_true = df_eval["gold_label"]
+
+            cm = confusion_matrix(y_true, y_pred, labels=[0, 1])
+            tn, fp, fn, tp = cm.ravel()
+            kappa = cohen_kappa_score(y_true, y_pred)
+            accuracy = (tp + tn) / len(df_eval) if len(df_eval) > 0 else 0
+            precision_val = tp / (tp + fp) if (tp + fp) > 0 else 0
+            recall_val = tp / (tp + fn) if (tp + fn) > 0 else 0
+            f1_val = (
+                2 * (precision_val * recall_val) / (precision_val + recall_val)
+                if (precision_val + recall_val) > 0
+                else 0
+            )
+
+            eval_results.append(
+                {
+                    "Model": ens_col,
+                    "Accuracy": round(accuracy, 3),
+                    "Precision (1)": round(precision_val, 3),
+                    "Recall (1)": round(recall_val, 3),
+                    "F1-Score (1)": round(f1_val, 3),
+                    "Cohen's Kappa": round(kappa, 3),
+                    "TN": tn,
+                    "FP": fp,
+                    "FN": fn,
+                    "TP": tp,
+                }
+            )
+
     # Summary table across all models
     df_metrics = pd.DataFrame(eval_results).set_index("Model")
     df_metrics.sort_values(by="F1-Score (1)", ascending=False, inplace=True)
@@ -212,6 +337,20 @@ if ANNOTATIONS_FILE.exists():
             ["Accuracy", "Precision (1)", "Recall (1)", "F1-Score (1)", "Cohen's Kappa"]
         ].to_string()
     )
+
+    # Show a focused ensemble-only view so the comparison is easy to spot.
+    ensemble_rows = df_metrics[
+        df_metrics.index.str.startswith("ensemble::")
+    ]
+    if not ensemble_rows.empty:
+        print("\n" + "=" * 60)
+        print(" ENSEMBLE-ONLY LEADERBOARD (Sorted by F1-Score) ")
+        print("=" * 60)
+        print(
+            ensemble_rows[
+                ["Accuracy", "Precision (1)", "Recall (1)", "F1-Score (1)", "Cohen's Kappa"]
+            ].to_string()
+        )
 
     # Save summary metrics to disk
     metrics_out = (
@@ -229,3 +368,4 @@ else:
     print(
         f"\n[!] Annotations file not found at {ANNOTATIONS_FILE}. Skipping evaluation."
     )
+
