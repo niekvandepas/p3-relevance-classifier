@@ -1,8 +1,10 @@
+import re
 import json
 import os
 import random
 from pathlib import Path
 from dotenv import load_dotenv
+from tqdm import tqdm
 from project_types import DelpherItem
 from util import preview_text, print_divider, print_header
 
@@ -42,15 +44,58 @@ def import_data(data_file: Path, limit: int | None = None) -> list[DelpherItem]:
     return results
 
 
+KEYWORDS_PATTERN = re.compile(
+    r"\bnederlandse keuken\b"
+    r"|"
+    r"\bnederlandse eetcultuur\b"
+    r"|"
+    r"\bnederlands eten\b"
+    r"|"
+    r"\bnederlandse cuisine\b"
+    r"|"
+    r"\bnederlandse maaltijd\b"
+    r"|"
+    r"\bhollandse maaltijd\b"
+    r"|"
+    r"\bhollandse keuken\b"
+    r"|"
+    r"\bhollands eten\b"
+    r"|"
+    r"\bnederlandse kost\b"
+    r"|"
+    r"\bhollandse kost\b"
+    r"|"
+    r"\bvaderlandse keuken\b"
+    r"|"
+    r"\bvaderlansd eten\b"
+    r"|"
+    r"\bvaderlandse kost\b",
+    flags=re.IGNORECASE,
+)
+
 DELPHER_LLM_ANNOTATIONS_FILE = "annotations/delpher_manual_eval_labels.json"
 
 print("Loading Delpher data from local .ndjson file")
 delpher_items_data_path = get_data_path()
 
 delpher_items = import_data(delpher_items_data_path)
+
+
+filtered_items = []
+
+for item in tqdm(delpher_items):
+    if KEYWORDS_PATTERN.search(item["plain_text"]) or KEYWORDS_PATTERN.search(
+        item.get("title", "")
+    ):
+        filtered_items.append(item)
+
+print(f"Filtered to {len(filtered_items)} items matching keywords")
 LABELING_RANDOM_SEED = int(os.environ.get("LABELING_RANDOM_SEED", "42"))
-random.Random(LABELING_RANDOM_SEED).shuffle(delpher_items)
+random.Random(LABELING_RANDOM_SEED).shuffle(filtered_items)
 print(f"Sampling items with random seed: {LABELING_RANDOM_SEED}")
+
+BOLD = "\033[1m"
+RESET = "\033[0m"
 
 annotations_dict = {}
 
@@ -58,16 +103,33 @@ if Path(DELPHER_LLM_ANNOTATIONS_FILE).exists():
     with open(DELPHER_LLM_ANNOTATIONS_FILE, "r") as f:
         annotations_dict = json.load(f)
 
+already_labeled = sum(
+    1 for item in filtered_items if item["identifier"] in annotations_dict
+)
+print_header(
+    f"{already_labeled}/{len(filtered_items)} items already labeled. "
+    f"Annotations file: {DELPHER_LLM_ANNOTATIONS_FILE}"
+)
+
 quit_requested = False
 
-for delpher_item in delpher_items:
+for index, delpher_item in enumerate(filtered_items, start=1):
     if delpher_item["identifier"] in annotations_dict:
         continue
 
     text = delpher_item["plain_text"]
 
+    print_divider()
+    print(
+        f"Item {index}/{len(filtered_items)} (labeled so far: {len(annotations_dict)})"
+    )
+    print(f"ID: {delpher_item['identifier']}")
+    print("")
+
     print(delpher_item["title"].upper())
-    print(preview_text(text))
+    preview = preview_text(text)
+    highlighted_preview = KEYWORDS_PATTERN.sub(rf"{BOLD}\g<0>{RESET}", preview)
+    print(highlighted_preview)
     print("")
 
     while True:
